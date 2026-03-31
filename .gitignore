@@ -1,0 +1,29 @@
+# Terraform
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.backup
+*.tfplan
+tfplan
+
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+crash.log
+crash.*.log
+
+# Lambda build artifacts
+lambda/**/*.zip
+
+# Python packages installed by CI into lambda dirs (installed at build time, not committed)
+lambda/**/*.dist-info/
+lambda/**/__pycache__/
+lambda/**/*.pyc
+lambda/**/bin/
+lambda/**/lib/
+lambda/**/lib64
+
+# Environment / secrets
+*.env
+.env*

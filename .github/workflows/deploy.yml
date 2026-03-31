@@ -1,0 +1,121 @@
+name: Deploy Infrastructure
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  AWS_REGION: ap-southeast-2
+  TF_VERSION: 1.6.6
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  terraform:
+    name: Terraform Plan & Apply
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write  # allows posting plan output as a PR comment
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── AWS credentials ──────────────────────────────────────────────────────
+      # Add these secrets to your repo:
+      # Settings → Secrets and variables → Actions
+      #   AWS_ACCESS_KEY_ID
+      #   AWS_SECRET_ACCESS_KEY
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ── Python + Lambda packaging ────────────────────────────────────────────
+      # Installs dependencies from requirements.txt into the lambda source dir
+      # so archive_file bundles them into the zip. GitHub runners do this fast
+      # so you never need to package locally.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Lambda dependencies
+        run: |
+          LAMBDA_DIR="lambda/hello_world"
+          REQUIREMENTS="$LAMBDA_DIR/requirements.txt"
+
+          if [ -f "$REQUIREMENTS" ] && [ -s "$REQUIREMENTS" ]; then
+            echo "Installing dependencies from $REQUIREMENTS..."
+            pip install -r "$REQUIREMENTS" -t "$LAMBDA_DIR/" --upgrade --no-cache-dir
+          else
+            echo "No dependencies to install."
+          fi
+
+      # ── Terraform setup ──────────────────────────────────────────────────────
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      # ── Init — connects to S3 backend (state is saved/locked here) ───────────
+      - name: Terraform Init
+        id: init
+        run: terraform init
+
+      # ── Validate ─────────────────────────────────────────────────────────────
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+      # ── Plan — runs on every push and PR ────────────────────────────────────
+      # archive_file zips lambda/ (source + installed deps) during plan
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color -out=tfplan
+        continue-on-error: true  # let next step post output even if plan fails
+
+      # Post plan output as a PR comment so reviewers can see what will change
+      - name: Post Plan to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `
+            #### Terraform Validate \`${{ steps.validate.outcome }}\`
+            #### Terraform Plan \`${{ steps.plan.outcome }}\`
+
+            <details><summary>Show Plan</summary>
+
+            \`\`\`hcl
+            ${{ steps.plan.outputs.stdout }}
+            \`\`\`
+
+            </details>
+
+            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*
+            `;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+      # Fail the job if terraform plan itself failed
+      - name: Check Plan Status
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+      # ── Apply — only on direct pushes to main (not PRs) ─────────────────────
+      # Uploads the packaged zip to Lambda and saves state to S3
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: terraform apply -auto-approve tfplan
