@@ -2,7 +2,7 @@
 # Once it's in state this block is a no-op on subsequent applies.
 import {
   to = aws_cloudwatch_log_group.lambda
-  id = "/aws/lambda/${var.lambda_function_name}-${var.environment}"
+  id = "/aws/lambda/serverless-web-app-dev"
 }
 
 resource "aws_cloudwatch_log_group" "lambda" {

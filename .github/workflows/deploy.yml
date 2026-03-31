@@ -49,7 +49,7 @@ jobs:
 
       - name: Install Lambda dependencies
         run: |
-          LAMBDA_DIR="lambda/hello_world"
+          LAMBDA_DIR="lambda/serverless_web_app"
           REQUIREMENTS="$LAMBDA_DIR/requirements.txt"
 
           if [ -f "$REQUIREMENTS" ] && [ -s "$REQUIREMENTS" ]; then

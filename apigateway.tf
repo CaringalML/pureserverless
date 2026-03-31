@@ -1,10 +1,10 @@
-resource "aws_apigatewayv2_api" "hello_world" {
+resource "aws_apigatewayv2_api" "serverless_web_app" {
   name          = "${var.lambda_function_name}-api-${var.environment}"
   protocol_type = "HTTP"
 
   cors_configuration {
     allow_origins = ["*"]
-    allow_methods = ["GET", "OPTIONS"]
+    allow_methods = ["GET", "POST", "OPTIONS"]
     allow_headers = ["Content-Type"]
   }
 
@@ -13,29 +13,29 @@ resource "aws_apigatewayv2_api" "hello_world" {
   }
 }
 
-resource "aws_apigatewayv2_stage" "hello_world" {
-  api_id      = aws_apigatewayv2_api.hello_world.id
+resource "aws_apigatewayv2_stage" "serverless_web_app" {
+  api_id      = aws_apigatewayv2_api.serverless_web_app.id
   name        = var.environment
   auto_deploy = true
 }
 
-resource "aws_apigatewayv2_integration" "hello_world" {
-  api_id             = aws_apigatewayv2_api.hello_world.id
+resource "aws_apigatewayv2_integration" "serverless_web_app" {
+  api_id             = aws_apigatewayv2_api.serverless_web_app.id
   integration_type   = "AWS_PROXY"
-  integration_uri    = aws_lambda_function.hello_world.invoke_arn
+  integration_uri    = aws_lambda_function.serverless_web_app.invoke_arn
   integration_method = "POST"
 }
 
-resource "aws_apigatewayv2_route" "hello_world" {
-  api_id    = aws_apigatewayv2_api.hello_world.id
+resource "aws_apigatewayv2_route" "serverless_web_app" {
+  api_id    = aws_apigatewayv2_api.serverless_web_app.id
   route_key = "GET /"
-  target    = "integrations/${aws_apigatewayv2_integration.hello_world.id}"
+  target    = "integrations/${aws_apigatewayv2_integration.serverless_web_app.id}"
 }
 
 resource "aws_lambda_permission" "api_gateway" {
   statement_id  = "AllowExecutionFromAPIGateway"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.hello_world.function_name
+  function_name = aws_lambda_function.serverless_web_app.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.hello_world.execution_arn}/*/*"
+  source_arn    = "${aws_apigatewayv2_api.serverless_web_app.execution_arn}/*/*"
 }

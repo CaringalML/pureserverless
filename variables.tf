@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "lambda_function_name" {
   description = "Base name for the Lambda function"
   type        = string
-  default     = "hello-world"
+  default     = "serverless-web-app"
 }
 
 variable "environment" {

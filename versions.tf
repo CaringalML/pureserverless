@@ -16,7 +16,7 @@ terraform {
   # Run `terraform -chdir=terraform-state apply` once before using this backend.
   backend "s3" {
     bucket         = "maangasserverless" # must match terraform-state/variables.tf
-    key            = "hello-world/terraform.tfstate"
+    key            = "serverless-web-app/terraform.tfstate"
     region         = "ap-southeast-2"
     dynamodb_table = "terraform-state-lock"
     encrypt        = true
