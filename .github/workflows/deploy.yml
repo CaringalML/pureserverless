@@ -92,10 +92,10 @@ jobs:
         run: |
           if [ "${{ steps.cache.outputs.cache-hit }}" = "true" ]; then
             echo "Cache hit — skipping provider download."
-            terraform init -migrate-state -force-copy -lock=false
+            terraform init -migrate-state -force-copy
           else
             echo "Cache miss — downloading providers."
-            terraform init -migrate-state -force-copy -lock=false
+            terraform init -migrate-state -force-copy
           fi
 
       # ── Validate ─────────────────────────────────────────────────────────────
@@ -107,7 +107,7 @@ jobs:
       # archive_file zips lambda/ (source + installed deps) during plan
       - name: Terraform Plan
         id: plan
-        run: terraform plan -no-color -out=tfplan -lock=false
+        run: terraform plan -no-color -out=tfplan
         continue-on-error: true  # let next step post output even if plan fails
 
       # Post plan output as a PR comment so reviewers can see what will change
@@ -146,7 +146,7 @@ jobs:
       # Uploads the packaged zip to Lambda and saves state to S3
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: terraform apply -auto-approve -lock=false tfplan
+        run: terraform apply -auto-approve tfplan
 
       # ── Outputs — print deployed resource URLs to the Actions log ────────────
       - name: Terraform Output
