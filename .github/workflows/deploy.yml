@@ -119,3 +119,13 @@ jobs:
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: terraform apply -auto-approve tfplan
+
+      # ── Outputs — print deployed resource URLs to the Actions log ────────────
+      - name: Terraform Output
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "========================================"
+          echo "       DEPLOYMENT OUTPUTS"
+          echo "========================================"
+          terraform output -no-color
+          echo "========================================"
