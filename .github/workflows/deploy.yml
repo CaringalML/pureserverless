@@ -83,10 +83,10 @@ jobs:
         run: |
           if [ "${{ steps.cache.outputs.cache-hit }}" = "true" ]; then
             echo "Cache hit — skipping provider download."
-            terraform init -migrate-state -force-copy
+            terraform init -migrate-state -force-copy -lock=false
           else
             echo "Cache miss — downloading providers."
-            terraform init -migrate-state -force-copy
+            terraform init -migrate-state -force-copy -lock=false
           fi
 
       # ── Validate ─────────────────────────────────────────────────────────────
