@@ -137,7 +137,7 @@ jobs:
       # Uploads the packaged zip to Lambda and saves state to S3
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: terraform apply -auto-approve tfplan
+        run: terraform apply -auto-approve -lock=false tfplan
 
       # ── Outputs — print deployed resource URLs to the Actions log ────────────
       - name: Terraform Output
