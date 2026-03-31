@@ -1,0 +1,92 @@
+*, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0f172a;
+    color: #f8fafc;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── Navbar ── */
+.navbar {
+    background: #1e293b;
+    border-bottom: 1px solid #334155;
+    padding: 1rem 2rem;
+}
+
+.nav-container {
+    max-width: 1100px;
+    margin: 0 auto;
+}
+
+.nav-brand {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #0ea5e9;
+    letter-spacing: 0.03em;
+}
+
+/* ── Main ── */
+.main-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+/* ── Hero ── */
+.hero {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+}
+
+.card {
+    text-align: center;
+    padding: 3rem 4rem;
+    background: #1e293b;
+    border-radius: 1rem;
+    border: 1px solid #334155;
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4);
+}
+
+.card h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.card p {
+    color: #94a3b8;
+    font-size: 1.1rem;
+    margin-top: 0.75rem;
+}
+
+.badge {
+    display: inline-block;
+    margin-top: 1.5rem;
+    padding: 0.35rem 1rem;
+    background: #0ea5e9;
+    border-radius: 9999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+}
+
+/* ── Footer ── */
+.footer {
+    text-align: center;
+    padding: 1.25rem;
+    background: #1e293b;
+    border-top: 1px solid #334155;
+    color: #64748b;
+    font-size: 0.875rem;
+}
