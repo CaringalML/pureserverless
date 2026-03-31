@@ -98,7 +98,7 @@ jobs:
       # archive_file zips lambda/ (source + installed deps) during plan
       - name: Terraform Plan
         id: plan
-        run: terraform plan -no-color -out=tfplan
+        run: terraform plan -no-color -out=tfplan -lock=false
         continue-on-error: true  # let next step post output even if plan fails
 
       # Post plan output as a PR comment so reviewers can see what will change
