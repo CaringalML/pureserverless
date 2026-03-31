@@ -77,12 +77,17 @@ jobs:
           restore-keys: |
             terraform-${{ runner.os }}-
 
-      # ── Init — migrate-state handles backend config changes (e.g. key renames) ─
-      # -migrate-state is safe to run every time: it's a no-op when nothing changed,
-      # and automatically moves state to the new S3 key when the backend config changes.
+      # ── Init — restores providers from cache, migrates state if backend changed ─
       - name: Terraform Init
         id: init
-        run: terraform init -migrate-state
+        run: |
+          if [ "${{ steps.cache.outputs.cache-hit }}" = "true" ]; then
+            echo "Cache hit — skipping provider download."
+            terraform init -migrate-state -force-copy
+          else
+            echo "Cache miss — downloading providers."
+            terraform init -migrate-state -force-copy
+          fi
 
       # ── Validate ─────────────────────────────────────────────────────────────
       - name: Terraform Validate
