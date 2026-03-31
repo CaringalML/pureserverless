@@ -65,10 +65,29 @@ jobs:
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      # ── Init — connects to S3 backend (state is saved/locked here) ───────────
+      # ── Cache .terraform — skips provider download when lock file unchanged ──
+      # Cache key changes only when versions.tf or .terraform.lock.hcl change,
+      # triggering a fresh terraform init. All other runs restore from cache.
+      - name: Cache Terraform providers
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: .terraform
+          key: terraform-${{ runner.os }}-${{ hashFiles('.terraform.lock.hcl', 'versions.tf') }}
+          restore-keys: |
+            terraform-${{ runner.os }}-
+
+      # ── Init — runs fully on cache miss, uses -upgrade=false on cache hit ────
       - name: Terraform Init
         id: init
-        run: terraform init
+        run: |
+          if [ "${{ steps.cache.outputs.cache-hit }}" = "true" ]; then
+            echo "Cache hit — skipping provider download."
+            terraform init -reconfigure
+          else
+            echo "Cache miss — downloading providers."
+            terraform init
+          fi
 
       # ── Validate ─────────────────────────────────────────────────────────────
       - name: Terraform Validate
