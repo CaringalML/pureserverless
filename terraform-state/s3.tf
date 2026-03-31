@@ -37,3 +37,20 @@ resource "aws_s3_bucket_public_access_block" "terraform_state" {
   ignore_public_acls      = true
   restrict_public_buckets = true
 }
+
+# Intelligent-Tiering: automatically moves objects to cheaper storage tiers
+# based on access patterns. Better than Standard-IA for state files since
+# there are no per-request penalties or minimum storage duration charges.
+resource "aws_s3_bucket_lifecycle_configuration" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+
+  rule {
+    id     = "intelligent-tiering"
+    status = "Enabled"
+
+    transition {
+      days          = 0
+      storage_class = "INTELLIGENT_TIERING"
+    }
+  }
+}
