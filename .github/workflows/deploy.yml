@@ -59,15 +59,6 @@ jobs:
             echo "No dependencies to install."
           fi
 
-      # ── Collect static files ─────────────────────────────────────────────────
-      # WhiteNoise CompressedManifestStaticFilesStorage requires collectstatic
-      # to generate staticfiles.json before the app starts — must run in CI
-      # so the manifest is bundled into the Lambda zip.
-      - name: Collect static files
-        run: |
-          cd lambda/serverless_web_app
-          DJANGO_SETTINGS_MODULE=config.settings.prod python manage.py collectstatic --noinput
-
       # ── Terraform setup ──────────────────────────────────────────────────────
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3

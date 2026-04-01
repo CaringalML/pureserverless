@@ -1,3 +1,2 @@
 django==5.0.4
 mangum==0.17.0
-whitenoise==6.6.0
