@@ -50,7 +50,7 @@ jobs:
             pip install -r "$LAMBDA_DIR/requirements.txt" -t "$LAMBDA_DIR/" --upgrade --no-cache-dir
           fi
 
-      # Automatically runs migrations ONLY if you set TARGET_BRANCH to CRUD
+      # Automatically runs migrations ONLY if you set TARGET_BRANCH to CRUD.
       - name: Run database migrations
         if: env.TARGET_BRANCH == 'CRUD'
         working-directory: lambda/serverless_web_app
