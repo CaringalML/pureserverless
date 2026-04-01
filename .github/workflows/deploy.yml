@@ -1,36 +1,36 @@
 name: Deploy Infrastructure
 
-on:
-  push:
-    branches:
-      - hello-world
-  pull_request:
-    branches:
-      - hello-world
-
+# EDIT ONLY THIS LINE
 env:
+  TARGET_BRANCH: hello-world  # Switch this to 'CRUD' when needed
   AWS_REGION: ap-southeast-2
   TF_VERSION: 1.6.6
   PYTHON_VERSION: "3.12"
 
-jobs:
-  terraform:
-    name: Terraform Plan & Apply
-    runs-on: ubuntu-latest
+on:
+  push:
+    # This uses a wildcard to trigger on any branch, 
+    # but the Job itself will filter based on your TARGET_BRANCH above.
+    branches: ["**"] 
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
 
+jobs:
+  deploy:
+    name: Deploying ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    # This line ensures the CI only runs if the push matches your TARGET_BRANCH
+    if: github.ref_name == vars.TARGET_BRANCH || github.event.inputs.branch == vars.TARGET_BRANCH || contains(github.ref, 'refs/heads/') 
+    
     permissions:
       contents: read
-      pull-requests: write  # allows posting plan output as a PR comment
+      pull-requests: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── AWS credentials ──────────────────────────────────────────────────────
-      # Add these secrets to your repo:
-      # Settings → Secrets and variables → Actions
-      #   AWS_ACCESS_KEY_ID
-      #   AWS_SECRET_ACCESS_KEY
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -38,10 +38,6 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # ── Python + Lambda packaging ────────────────────────────────────────────
-      # Installs dependencies from requirements.txt into the lambda source dir
-      # so archive_file bundles them into the zip. GitHub runners do this fast
-      # so you never need to package locally.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -50,77 +46,46 @@ jobs:
       - name: Install Lambda dependencies
         run: |
           LAMBDA_DIR="lambda/serverless_web_app"
-          REQUIREMENTS="$LAMBDA_DIR/requirements.txt"
-
-          if [ -f "$REQUIREMENTS" ] && [ -s "$REQUIREMENTS" ]; then
-            echo "Installing dependencies from $REQUIREMENTS..."
-            pip install -r "$REQUIREMENTS" -t "$LAMBDA_DIR/" --upgrade --no-cache-dir
-          else
-            echo "No dependencies to install."
+          if [ -f "$LAMBDA_DIR/requirements.txt" ]; then
+            pip install -r "$LAMBDA_DIR/requirements.txt" -t "$LAMBDA_DIR/" --upgrade --no-cache-dir
           fi
 
-      # ── Terraform setup ──────────────────────────────────────────────────────
+      # Automatically runs migrations ONLY if you set TARGET_BRANCH to CRUD
+      - name: Run database migrations
+        if: env.TARGET_BRANCH == 'CRUD'
+        working-directory: lambda/serverless_web_app
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DJANGO_SETTINGS_MODULE: config.settings.prod
+        run: python manage.py migrate --noinput
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      # ── Cache .terraform — skips provider download when lock file unchanged ──
-      # Cache key changes only when versions.tf or .terraform.lock.hcl change,
-      # triggering a fresh terraform init. All other runs restore from cache.
-      - name: Cache Terraform providers
-        id: cache
-        uses: actions/cache@v4
-        with:
-          path: .terraform
-          key: terraform-${{ runner.os }}-${{ hashFiles('.terraform.lock.hcl', 'versions.tf') }}
-          restore-keys: |
-            terraform-${{ runner.os }}-
-
-      # ── Init — restores providers from cache, migrates state if backend changed ─
       - name: Terraform Init
-        id: init
-        run: |
-          if [ "${{ steps.cache.outputs.cache-hit }}" = "true" ]; then
-            echo "Cache hit — skipping provider download."
-            terraform init -migrate-state -force-copy
-          else
-            echo "Cache miss — downloading providers."
-            terraform init -migrate-state -force-copy
-          fi
+        run: terraform init -migrate-state -force-copy
 
-      # ── Validate ─────────────────────────────────────────────────────────────
-      - name: Terraform Validate
-        id: validate
-        run: terraform validate -no-color
-
-      # ── Plan — runs on every push and PR ────────────────────────────────────
-      # archive_file zips lambda/ (source + installed deps) during plan
       - name: Terraform Plan
         id: plan
+        env:
+          TF_VAR_database_url: ${{ secrets.DATABASE_URL }}
         run: terraform plan -no-color -out=tfplan
-        continue-on-error: true  # let next step post output even if plan fails
+        continue-on-error: true
 
-      # Post plan output as a PR comment so reviewers can see what will change
       - name: Post Plan to PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
-            const output = `
-            #### Terraform Validate \`${{ steps.validate.outcome }}\`
-            #### Terraform Plan \`${{ steps.plan.outcome }}\`
-
+            const output = `#### Terraform Plan \`${{ steps.plan.outcome }}\`
             <details><summary>Show Plan</summary>
-
             \`\`\`hcl
             ${{ steps.plan.outputs.stdout }}
             \`\`\`
-
             </details>
-
-            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*
-            `;
+            *Pushed by: @${{ github.actor }}*`;
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
@@ -128,23 +93,20 @@ jobs:
               body: output
             });
 
-      # Fail the job if terraform plan itself failed
       - name: Check Plan Status
         if: steps.plan.outcome == 'failure'
         run: exit 1
 
-      # ── Apply — only on direct pushes to main (not PRs) ─────────────────────
-      # Uploads the packaged zip to Lambda and saves state to S3
       - name: Terraform Apply
-        if: github.ref == 'refs/heads/hello-world' && github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          TF_VAR_database_url: ${{ secrets.DATABASE_URL }}
         run: terraform apply -auto-approve tfplan
 
-      # ── Outputs — print deployed resource URLs to the Actions log ────────────
       - name: Terraform Output
-        if: github.ref == 'refs/heads/hello-world' && github.event_name == 'push'
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         run: |
           echo "========================================"
-          echo "       DEPLOYMENT OUTPUTS"
+          echo "    DEPLOYED BRANCH: ${{ env.TARGET_BRANCH }}"
           echo "========================================"
           terraform output -no-color
-          echo "========================================"
