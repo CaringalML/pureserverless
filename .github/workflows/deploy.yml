@@ -1,6 +1,6 @@
 name: Deploy Infrastructure
 
-# EDIT ONLY THIS LINE
+# EDIT ONLY THIS LINE.
 env:
   TARGET_BRANCH: hello-world  # Switch this to 'CRUD' when needed
   AWS_REGION: ap-southeast-2
