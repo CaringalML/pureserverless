@@ -1,4 +1,5 @@
 import os
+import dj_database_url
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -16,6 +17,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -34,7 +36,14 @@ TEMPLATES = [
     },
 ]
 
-DATABASES = {}
+# Neon Postgres — DATABASE_URL set as Lambda env var / GitHub secret
+DATABASES = {
+    "default": dj_database_url.config(
+        env="DATABASE_URL",
+        conn_max_age=60,
+        ssl_require=True,
+    )
+}
 
 STATIC_URL = "/static/"
 

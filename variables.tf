@@ -15,3 +15,9 @@ variable "environment" {
   type        = string
   default     = "dev"
 }
+
+variable "database_url" {
+  description = "Neon Postgres connection string (set via TF_VAR_database_url in GitHub secrets)"
+  type        = string
+  sensitive   = true
+}

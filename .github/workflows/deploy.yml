@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - hello-world
+      - CRUD
   pull_request:
     branches:
       - hello-world
@@ -20,17 +21,13 @@ jobs:
 
     permissions:
       contents: read
-      pull-requests: write  # allows posting plan output as a PR comment
+      pull-requests: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       # ── AWS credentials ──────────────────────────────────────────────────────
-      # Add these secrets to your repo:
-      # Settings → Secrets and variables → Actions
-      #   AWS_ACCESS_KEY_ID
-      #   AWS_SECRET_ACCESS_KEY
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -39,9 +36,6 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       # ── Python + Lambda packaging ────────────────────────────────────────────
-      # Installs dependencies from requirements.txt into the lambda source dir
-      # so archive_file bundles them into the zip. GitHub runners do this fast
-      # so you never need to package locally.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -59,15 +53,22 @@ jobs:
             echo "No dependencies to install."
           fi
 
+      # ── Run Django migrations against Neon DB ────────────────────────────────
+      # Runs before packaging so the schema is always up to date before deploy.
+      - name: Run database migrations
+        working-directory: lambda/serverless_web_app
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DJANGO_SETTINGS_MODULE: config.settings.prod
+        run: python manage.py migrate --noinput
+
       # ── Terraform setup ──────────────────────────────────────────────────────
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      # ── Cache .terraform — skips provider download when lock file unchanged ──
-      # Cache key changes only when versions.tf or .terraform.lock.hcl change,
-      # triggering a fresh terraform init. All other runs restore from cache.
+      # ── Cache .terraform ─────────────────────────────────────────────────────
       - name: Cache Terraform providers
         id: cache
         uses: actions/cache@v4
@@ -77,31 +78,24 @@ jobs:
           restore-keys: |
             terraform-${{ runner.os }}-
 
-      # ── Init — restores providers from cache, migrates state if backend changed ─
+      # ── Init ─────────────────────────────────────────────────────────────────
       - name: Terraform Init
         id: init
-        run: |
-          if [ "${{ steps.cache.outputs.cache-hit }}" = "true" ]; then
-            echo "Cache hit — skipping provider download."
-            terraform init -migrate-state -force-copy
-          else
-            echo "Cache miss — downloading providers."
-            terraform init -migrate-state -force-copy
-          fi
+        run: terraform init -migrate-state -force-copy
 
       # ── Validate ─────────────────────────────────────────────────────────────
       - name: Terraform Validate
         id: validate
         run: terraform validate -no-color
 
-      # ── Plan — runs on every push and PR ────────────────────────────────────
-      # archive_file zips lambda/ (source + installed deps) during plan
+      # ── Plan ─────────────────────────────────────────────────────────────────
       - name: Terraform Plan
         id: plan
+        env:
+          TF_VAR_database_url: ${{ secrets.DATABASE_URL }}
         run: terraform plan -no-color -out=tfplan
-        continue-on-error: true  # let next step post output even if plan fails
+        continue-on-error: true
 
-      # Post plan output as a PR comment so reviewers can see what will change
       - name: Post Plan to PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
@@ -128,18 +122,18 @@ jobs:
               body: output
             });
 
-      # Fail the job if terraform plan itself failed
       - name: Check Plan Status
         if: steps.plan.outcome == 'failure'
         run: exit 1
 
-      # ── Apply — only on direct pushes to main (not PRs) ─────────────────────
-      # Uploads the packaged zip to Lambda and saves state to S3
+      # ── Apply ─────────────────────────────────────────────────────────────────
       - name: Terraform Apply
         if: github.ref == 'refs/heads/hello-world' && github.event_name == 'push'
+        env:
+          TF_VAR_database_url: ${{ secrets.DATABASE_URL }}
         run: terraform apply -auto-approve tfplan
 
-      # ── Outputs — print deployed resource URLs to the Actions log ────────────
+      # ── Outputs ───────────────────────────────────────────────────────────────
       - name: Terraform Output
         if: github.ref == 'refs/heads/hello-world' && github.event_name == 'push'
         run: |
