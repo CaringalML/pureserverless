@@ -196,6 +196,21 @@ All CRUD operations run without full page reloads. Django views detect the `HX-R
 
 ---
 
+## Alerting
+
+SNS email alerts are sent to `lawrencecaringal5@gmail.com` when either alarm fires. Defined in [sns.tf](sns.tf) and [cloudwatch.tf](cloudwatch.tf).
+
+| Alarm | Metric | Threshold | Signal |
+|-------|--------|-----------|--------|
+| `4xx-errors` | `4XXError` (API Gateway) | > 50 in 1 minute | 429 throttling firing — attacker is being blocked |
+| `request-spike` | `Count` (API Gateway) | > 500 in 1 minute | High request volume — possible DDoS before throttling kicks in |
+
+Both alarms also send a recovery email when traffic returns to normal.
+
+> **After first deploy:** AWS sends a confirmation email to your address. You must click **Confirm subscription** or no alerts will be delivered.
+
+---
+
 ## Rate Limiting
 
 Throttling is configured on the API Gateway stage in [apigateway.tf](apigateway.tf):
@@ -264,9 +279,10 @@ aws dynamodb delete-item \
 |------|-----------|
 | `lambda.tf` | `aws_lambda_function`, `archive_file` (zips Django app) |
 | `apigateway.tf` | HTTP API, stage (with throttling), integration, `$default` catch-all route, Lambda permission |
+| `sns.tf` | SNS topic + email subscription for alerts |
 | `iam.tf` | Lambda execution role, `AWSLambdaBasicExecutionRole`, SSM read policy |
 | `ssm.tf` | `aws_ssm_parameter` — database URL as `SecureString` |
-| `cloudwatch.tf` | Log group `/aws/lambda/serverless-web-app-dev` (14-day retention) |
+| `cloudwatch.tf` | Log group (14-day retention), 4xx error alarm, request spike alarm |
 | `versions.tf` | Terraform version, providers, S3 backend |
 | `variables.tf` | `aws_region`, `lambda_function_name`, `environment`, `database_url` |
 | `outputs.tf` | `api_endpoint`, `lambda_function_name`, `lambda_function_arn` |
@@ -292,6 +308,9 @@ Without it, Django's `{% url %}` and `redirect()` generate paths without the sta
 
 **Why settings split (base/dev/prod)?**
 `DJANGO_SETTINGS_MODULE=config.settings.prod` is set on Lambda. Dev settings (DEBUG=True, no SSM) are used locally. Debug output never reaches production.
+
+**Why SNS alerts instead of just relying on throttling?**
+Throttling silently drops excess requests — you'd never know an attack happened without checking metrics manually. SNS alarms notify you the moment a spike occurs so you can investigate, tighten the rate limits, or block the source. The 4xx alarm catches the throttling itself; the request-count alarm catches the spike before throttling even kicks in.
 
 **Why stage-level throttling on API Gateway?**
 Without throttling, a DDoS or traffic spike invokes Lambda on every single request — each invocation costs money and hammers the database. Setting `throttling_rate_limit = 100` and `throttling_burst_limit = 200` on the stage means API Gateway returns `429 Too Many Requests` for excess traffic before it ever reaches Lambda. The database and your AWS bill are protected at the network edge.
