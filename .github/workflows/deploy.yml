@@ -8,6 +8,7 @@ on:
   pull_request:
     branches:
       - hello-world
+      - CRUD
 
 env:
   AWS_REGION: ap-southeast-2
@@ -15,9 +16,11 @@ env:
   PYTHON_VERSION: "3.12"
 
 jobs:
-  terraform:
-    name: Terraform Plan & Apply
+  # ── Hello World — deploys the static Django hello world page ────────────────
+  deploy-hello-world:
+    name: Deploy Hello World
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/hello-world' || (github.event_name == 'pull_request' && github.base_ref == 'hello-world')
 
     permissions:
       contents: read
@@ -27,7 +30,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── AWS credentials ──────────────────────────────────────────────────────
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -35,7 +37,6 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # ── Python + Lambda packaging ────────────────────────────────────────────
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -45,16 +46,114 @@ jobs:
         run: |
           LAMBDA_DIR="lambda/serverless_web_app"
           REQUIREMENTS="$LAMBDA_DIR/requirements.txt"
-
           if [ -f "$REQUIREMENTS" ] && [ -s "$REQUIREMENTS" ]; then
-            echo "Installing dependencies from $REQUIREMENTS..."
+            echo "Installing dependencies..."
             pip install -r "$REQUIREMENTS" -t "$LAMBDA_DIR/" --upgrade --no-cache-dir
           else
             echo "No dependencies to install."
           fi
 
-      # ── Run Django migrations against Neon DB ────────────────────────────────
-      # Runs before packaging so the schema is always up to date before deploy.
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Cache Terraform providers
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: .terraform
+          key: terraform-${{ runner.os }}-${{ hashFiles('.terraform.lock.hcl', 'versions.tf') }}
+          restore-keys: terraform-${{ runner.os }}-
+
+      - name: Terraform Init
+        run: terraform init -migrate-state -force-copy
+
+      - name: Terraform Validate
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color -out=tfplan
+        continue-on-error: true
+
+      - name: Post Plan to PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `
+            #### Terraform Plan \`${{ steps.plan.outcome }}\`
+            <details><summary>Show Plan</summary>
+
+            \`\`\`hcl
+            ${{ steps.plan.outputs.stdout }}
+            \`\`\`
+            </details>
+
+            *Pushed by: @${{ github.actor }}*
+            `;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+      - name: Check Plan Status
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/hello-world' && github.event_name == 'push'
+        run: terraform apply -auto-approve tfplan
+
+      - name: Terraform Output
+        if: github.ref == 'refs/heads/hello-world' && github.event_name == 'push'
+        run: |
+          echo "========================================"
+          echo "       HELLO WORLD DEPLOYMENT OUTPUTS"
+          echo "========================================"
+          terraform output -no-color
+          echo "========================================"
+
+  # ── CRUD — deploys the full Django CRUD app with Neon Postgres ──────────────
+  deploy-crud:
+    name: Deploy CRUD App
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/CRUD' || (github.event_name == 'pull_request' && github.base_ref == 'CRUD')
+
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Lambda dependencies
+        run: |
+          LAMBDA_DIR="lambda/serverless_web_app"
+          REQUIREMENTS="$LAMBDA_DIR/requirements.txt"
+          if [ -f "$REQUIREMENTS" ] && [ -s "$REQUIREMENTS" ]; then
+            echo "Installing dependencies..."
+            pip install -r "$REQUIREMENTS" -t "$LAMBDA_DIR/" --upgrade --no-cache-dir
+          else
+            echo "No dependencies to install."
+          fi
+
       - name: Run database migrations
         working-directory: lambda/serverless_web_app
         env:
@@ -62,33 +161,25 @@ jobs:
           DJANGO_SETTINGS_MODULE: config.settings.prod
         run: python manage.py migrate --noinput
 
-      # ── Terraform setup ──────────────────────────────────────────────────────
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
-      # ── Cache .terraform ─────────────────────────────────────────────────────
       - name: Cache Terraform providers
         id: cache
         uses: actions/cache@v4
         with:
           path: .terraform
           key: terraform-${{ runner.os }}-${{ hashFiles('.terraform.lock.hcl', 'versions.tf') }}
-          restore-keys: |
-            terraform-${{ runner.os }}-
+          restore-keys: terraform-${{ runner.os }}-
 
-      # ── Init ─────────────────────────────────────────────────────────────────
       - name: Terraform Init
-        id: init
         run: terraform init -migrate-state -force-copy
 
-      # ── Validate ─────────────────────────────────────────────────────────────
       - name: Terraform Validate
-        id: validate
         run: terraform validate -no-color
 
-      # ── Plan ─────────────────────────────────────────────────────────────────
       - name: Terraform Plan
         id: plan
         env:
@@ -102,18 +193,15 @@ jobs:
         with:
           script: |
             const output = `
-            #### Terraform Validate \`${{ steps.validate.outcome }}\`
             #### Terraform Plan \`${{ steps.plan.outcome }}\`
-
             <details><summary>Show Plan</summary>
 
             \`\`\`hcl
             ${{ steps.plan.outputs.stdout }}
             \`\`\`
-
             </details>
 
-            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*
+            *Pushed by: @${{ github.actor }}*
             `;
             github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -126,19 +214,17 @@ jobs:
         if: steps.plan.outcome == 'failure'
         run: exit 1
 
-      # ── Apply ─────────────────────────────────────────────────────────────────
       - name: Terraform Apply
-        if: (github.ref == 'refs/heads/hello-world' || github.ref == 'refs/heads/CRUD') && github.event_name == 'push'
+        if: github.ref == 'refs/heads/CRUD' && github.event_name == 'push'
         env:
           TF_VAR_database_url: ${{ secrets.DATABASE_URL }}
         run: terraform apply -auto-approve tfplan
 
-      # ── Outputs ───────────────────────────────────────────────────────────────
       - name: Terraform Output
-        if: (github.ref == 'refs/heads/hello-world' || github.ref == 'refs/heads/CRUD') && github.event_name == 'push'
+        if: github.ref == 'refs/heads/CRUD' && github.event_name == 'push'
         run: |
           echo "========================================"
-          echo "       DEPLOYMENT OUTPUTS"
+          echo "       CRUD DEPLOYMENT OUTPUTS"
           echo "========================================"
           terraform output -no-color
           echo "========================================"
