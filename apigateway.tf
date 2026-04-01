@@ -17,6 +17,11 @@ resource "aws_apigatewayv2_stage" "serverless_web_app" {
   api_id      = aws_apigatewayv2_api.serverless_web_app.id
   name        = var.environment
   auto_deploy = true
+
+  default_route_settings {
+    throttling_rate_limit  = 100  # max sustained requests per second
+    throttling_burst_limit = 200  # max requests allowed during a traffic spike
+  }
 }
 
 resource "aws_apigatewayv2_integration" "serverless_web_app" {
