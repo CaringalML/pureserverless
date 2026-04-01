@@ -1,8 +1,10 @@
 # Serverless Web App
 
-A full Django web application running on AWS Lambda, provisioned with Terraform and deployed automatically via GitHub Actions CI/CD. No servers to manage — push to `main` and it deploys itself.
+A full Django CRUD web application running on AWS Lambda, provisioned with Terraform and deployed automatically via GitHub Actions CI/CD. No servers to manage — push to a branch and it deploys itself.
 
 **Live stack:** Django 5 → Mangum (ASGI) → AWS Lambda → API Gateway v2 → Sydney (`ap-southeast-2`)
+
+**Frontend:** Tailwind CSS (CDN) + HTMX + Alpine.js — reactive UI with zero page reloads, no build step, no Node.js.
 
 ---
 
@@ -12,7 +14,10 @@ A full Django web application running on AWS Lambda, provisioned with Terraform 
 Browser
   └── API Gateway v2 (HTTP API, $default catch-all route)
         └── Lambda (Python 3.12 — Django + Mangum)
-              ├── Tailwind CSS (loaded from CDN, no Lambda cost)
+              ├── Neon PostgreSQL (serverless Postgres, credentials via AWS SSM)
+              ├── Tailwind CSS  (CDN)
+              ├── HTMX          (CDN — partial HTML swaps, no full page reloads)
+              ├── Alpine.js     (CDN — lightweight UI state)
               └── CloudWatch Logs (/aws/lambda/serverless-web-app-dev)
 
 Terraform Remote State
@@ -22,47 +27,70 @@ Terraform Remote State
 
 ---
 
+## Branches
+
+| Branch | Description |
+|--------|-------------|
+| `hello-world` | Minimal Django hello world page |
+| `CRUD` | Full CRUD app — Items list with inline create, edit, delete via HTMX |
+
+The CI/CD pipeline targets whichever branch is set as `TARGET_BRANCH` in [.github/workflows/deploy.yml](.github/workflows/deploy.yml). Database migrations run automatically when `TARGET_BRANCH` is `CRUD`.
+
+---
+
 ## Project Structure
 
 ```
 .
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml          # CI/CD pipeline
+│       └── deploy.yml              # CI/CD pipeline
 ├── lambda/
-│   └── serverless_web_app/     # Django application
+│   └── serverless_web_app/         # Django application
 │       ├── config/
-│       │   ├── urls.py         # root URL conf
+│       │   ├── urls.py             # root URL conf
 │       │   └── settings/
-│       │       ├── base.py     # shared settings
-│       │       ├── dev.py      # local development
-│       │       └── prod.py     # Lambda production
-│       ├── core/               # main Django app
-│       │   ├── apps.py
-│       │   ├── urls.py
-│       │   └── views.py
+│       │       ├── base.py         # shared settings + SSM credential fetch
+│       │       ├── dev.py          # local development
+│       │       └── prod.py         # Lambda production
+│       ├── core/                   # main Django app
+│       │   ├── models.py           # Item model
+│       │   ├── views.py            # CRUD views (HTMX-aware, returns partials)
+│       │   ├── forms.py            # ItemForm with Tailwind widgets
+│       │   ├── urls.py             # URL patterns
+│       │   └── migrations/
 │       ├── templates/
-│       │   ├── base.html       # Tailwind layout
+│       │   ├── base.html           # Tailwind + HTMX + Alpine layout
 │       │   └── core/
-│       │       └── index.html
+│       │       ├── index.html              # items list with Alpine toggle
+│       │       ├── item_detail.html
+│       │       ├── item_form.html          # fallback full-page form
+│       │       ├── item_confirm_delete.html
+│       │       └── partials/
+│       │           ├── item_row.html       # single item row (HTMX target)
+│       │           ├── create_form.html    # inline create form
+│       │           └── item_edit_form.html # inline edit form
 │       ├── manage.py
-│       ├── requirements.txt    # django, mangum
-│       └── wsgi.py             # Mangum ASGI Lambda handler
-├── terraform-state/            # bootstrap — run once manually
-│   ├── dynamodb.tf             # state lock table
-│   ├── s3.tf                   # state bucket
+│       ├── requirements.txt
+│       └── wsgi.py                 # Mangum ASGI Lambda handler
+├── terraform-state/                # bootstrap — run once manually
+│   ├── dynamodb.tf
+│   ├── s3.tf
 │   ├── provider.tf
 │   ├── variables.tf
 │   ├── versions.tf
 │   └── outputs.tf
-├── apigateway.tf               # API Gateway v2 + routes
-├── cloudwatch.tf               # CloudWatch log group
-├── iam.tf                      # Lambda execution role
-├── lambda.tf                   # Lambda function + zip packaging
-├── outputs.tf                  # API URL, function name/ARN
-├── provider.tf                 # AWS provider
-├── variables.tf                # region, function name, environment
-└── versions.tf                 # Terraform + S3 backend config
+├── apigateway.tf                   # API Gateway v2 + routes
+├── cloudwatch.tf                   # CloudWatch log group
+├── iam.tf                          # Lambda execution role + SSM read policy
+├── lambda.tf                       # Lambda function + zip packaging
+├── outputs.tf                      # API URL, function name/ARN
+├── provider.tf                     # AWS provider
+├── ssm.tf                          # SSM SecureString for database URL
+├── variables.tf                    # region, function name, environment, database_url
+├── versions.tf                     # Terraform + S3 backend config
+├── terraform.tfvars.example        # copy to terraform.tfvars and fill in secrets
+└── terraform.tfvars                # real secrets — gitignored
 ```
 
 ---
@@ -72,6 +100,7 @@ Terraform Remote State
 - [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.6.0
 - [AWS CLI](https://aws.amazon.com/cli/) configured with credentials
 - Python 3.12
+- A [Neon](https://neon.tech) PostgreSQL database (free tier is sufficient)
 - A GitHub repository with Actions enabled
 
 ---
@@ -80,7 +109,7 @@ Terraform Remote State
 
 ### 1. Bootstrap the Terraform state backend
 
-This only needs to be done **once**. It creates the S3 bucket and DynamoDB table that store all future Terraform state.
+Run this **once** to create the S3 bucket and DynamoDB table that store all future Terraform state.
 
 ```bash
 cd terraform-state
@@ -89,33 +118,41 @@ terraform apply
 ```
 
 > The S3 bucket name (`maangasserverless`) must be globally unique. Change it in
-> [terraform-state/variables.tf](terraform-state/variables.tf) and [versions.tf](versions.tf)
-> before running if it conflicts.
+> `terraform-state/variables.tf` and `versions.tf` before running if it conflicts.
 
-### 2. Add GitHub Actions secrets
+### 2. Create terraform.tfvars
 
-Go to your repo → **Settings → Secrets and variables → Actions** and add:
+```bash
+cp terraform.tfvars.example terraform.tfvars
+```
+
+Fill in your Neon connection string:
+
+```hcl
+database_url = "postgresql://user:password@host.ap-southeast-2.aws.neon.tech/dbname?sslmode=require"
+```
+
+This file is gitignored. Terraform stores the URL in AWS SSM Parameter Store as an encrypted `SecureString`. Lambda reads it at cold start via IAM role — the plain-text URL never appears in the console, state output, or CI logs.
+
+### 3. Add GitHub Actions secrets
+
+Go to **Settings → Secrets and variables → Actions** and add:
 
 | Secret | Description |
 |--------|-------------|
 | `AWS_ACCESS_KEY_ID` | AWS IAM access key |
 | `AWS_SECRET_ACCESS_KEY` | AWS IAM secret key |
+| `DATABASE_URL` | Neon connection string (used by CI to run migrations) |
 
-The IAM user needs permissions for: Lambda, API Gateway, IAM, CloudWatch Logs, S3, DynamoDB.
+The IAM user needs permissions for: Lambda, API Gateway, IAM, CloudWatch Logs, S3, DynamoDB, SSM.
 
-### 3. Push to main
+### 4. Push to the CRUD branch
 
 ```bash
-git push origin main
+git push origin CRUD
 ```
 
-GitHub Actions will:
-1. Install Python dependencies into the Lambda source folder
-2. Zip the Django app
-3. Run `terraform init` (restoring providers from cache)
-4. Run `terraform plan`
-5. Run `terraform apply` — deploys Lambda + API Gateway
-6. Print the API endpoint URL in the job logs
+GitHub Actions will install dependencies, run migrations, terraform plan, terraform apply, and print the live API URL.
 
 ---
 
@@ -123,22 +160,52 @@ GitHub Actions will:
 
 Defined in [.github/workflows/deploy.yml](.github/workflows/deploy.yml).
 
+Set `TARGET_BRANCH` at the top of the file to control which branch triggers a deployment:
+
+```yaml
+env:
+  TARGET_BRANCH: CRUD  # Switch to 'hello-world' for the minimal app
 ```
-push to main
-    ├── Install Python deps (pip install -r requirements.txt -t lambda/serverless_web_app/)
-    ├── Restore Terraform provider cache (skips 600MB download if lock file unchanged)
+
+```
+push to TARGET_BRANCH
+    ├── pip install -r requirements.txt -t lambda/serverless_web_app/
+    ├── python manage.py migrate (only when TARGET_BRANCH == 'CRUD')
     ├── terraform init -migrate-state -force-copy
-    ├── terraform validate
     ├── terraform plan -out=tfplan
     └── terraform apply -auto-approve tfplan
-            └── Prints DEPLOYMENT OUTPUTS (API URL, Lambda ARN, function name)
+            └── Prints API URL, Lambda ARN, function name
 
 open pull request
     ├── terraform plan
     └── Posts plan output as a PR comment
 ```
 
-**Provider caching:** The `.terraform/` directory is cached keyed on `versions.tf` + `.terraform.lock.hcl`. Providers are only re-downloaded when you change a provider version — all other runs skip the download entirely.
+---
+
+## HTMX + Alpine.js Interactions
+
+All CRUD operations run without full page reloads. Django views detect the `HX-Request` header and return HTML partials instead of full pages.
+
+| Action | Mechanism |
+|--------|-----------|
+| **Create** | Alpine toggles inline form open/closed. HTMX POSTs to `/create/`, server returns `item_row.html` inserted at top of list. `HX-Trigger: itemCreated` header tells Alpine to close the form. |
+| **Edit** | Edit button triggers HTMX GET to `/<pk>/edit/`, server returns `item_edit_form.html` which replaces the row in-place. Save POSTs back, server returns the updated row. |
+| **Cancel edit** | HTMX GET to `/<pk>/row/` fetches the original row and swaps it back. |
+| **Delete** | HTMX POST to `/<pk>/delete/` with a confirm dialog. Server deletes and returns empty — HTMX removes the row from the DOM. |
+
+---
+
+## Database Credentials Flow
+
+```
+terraform.tfvars (local, gitignored)
+    └── terraform apply
+            └── aws_ssm_parameter (SecureString, KMS-encrypted)
+                    └── Lambda IAM role (ssm:GetParameter)
+                            └── base.py _get_database_url() fetches at cold start
+                                    └── dj-database-url parses into DATABASES
+```
 
 ---
 
@@ -147,50 +214,25 @@ open pull request
 ```bash
 cd lambda/serverless_web_app
 pip install -r requirements.txt
+export DATABASE_URL="postgresql://..."
+python manage.py migrate
 python manage.py runserver
 ```
 
-Runs with `config.settings.dev` (DEBUG=True). Visit `http://localhost:8000`.
-
----
-
-## Adding a New Page
-
-1. Add a URL in [lambda/serverless_web_app/core/urls.py](lambda/serverless_web_app/core/urls.py)
-2. Add a view in [lambda/serverless_web_app/core/views.py](lambda/serverless_web_app/core/views.py)
-3. Add a template in [lambda/serverless_web_app/templates/core/](lambda/serverless_web_app/templates/core/)
-4. Push to `main` — GitHub Actions deploys it automatically
-
----
-
-## Adding Python Dependencies
-
-Add packages to [lambda/serverless_web_app/requirements.txt](lambda/serverless_web_app/requirements.txt):
-
-```
-django==5.0.4
-mangum==0.17.0
-requests==2.31.0   # example
-```
-
-Push to `main`. The GitHub Actions runner installs all packages into the Lambda folder and bundles them into the zip — no local packaging needed.
+Runs with `config.settings.dev` (DEBUG=True, no SSM). Visit `http://localhost:8000`.
 
 ---
 
 ## Terraform State
 
-State is stored remotely so it is never lost and concurrent applies are prevented.
-
 | Resource | Name | Purpose |
 |----------|------|---------|
-| S3 Bucket | `maangasserverless` | Stores `terraform.tfstate` |
+| S3 Bucket | `maangasserverless` | Stores `terraform.tfstate` (Intelligent-Tiering) |
 | DynamoDB Table | `terraform-state-lock` | Locks state during plan/apply |
 
-**State file path in S3:** `serverless-web-app/terraform.tfstate`
+**State file path:** `serverless-web-app/terraform.tfstate`
 
-**Storage class:** S3 Intelligent-Tiering — automatically moves state files to cheaper tiers during inactive periods, with no retrieval penalties.
-
-### If a pipeline gets stuck and leaves a stale lock
+### Clearing a stale lock
 
 ```bash
 aws dynamodb delete-item \
@@ -207,30 +249,34 @@ aws dynamodb delete-item \
 |------|-----------|
 | `lambda.tf` | `aws_lambda_function`, `archive_file` (zips Django app) |
 | `apigateway.tf` | HTTP API, stage, integration, `$default` catch-all route, Lambda permission |
-| `iam.tf` | Lambda execution role + `AWSLambdaBasicExecutionRole` policy |
+| `iam.tf` | Lambda execution role, `AWSLambdaBasicExecutionRole`, SSM read policy |
+| `ssm.tf` | `aws_ssm_parameter` — database URL as `SecureString` |
 | `cloudwatch.tf` | Log group `/aws/lambda/serverless-web-app-dev` (14-day retention) |
 | `versions.tf` | Terraform version, providers, S3 backend |
-| `variables.tf` | `aws_region`, `lambda_function_name`, `environment` |
+| `variables.tf` | `aws_region`, `lambda_function_name`, `environment`, `database_url` |
 | `outputs.tf` | `api_endpoint`, `lambda_function_name`, `lambda_function_arn` |
 
 ---
 
 ## Key Design Decisions
 
-**Why Mangum?**
-Mangum is an ASGI adapter that translates API Gateway's event format into Django's ASGI interface, allowing Django to run as a Lambda handler without modification.
+**Why HTMX + Alpine instead of React/Vue?**
+No build step, no bundler, no `node_modules`. Two CDN script tags give you SPA-like interactions — inline forms, in-place edits, no-reload deletes. The server renders HTML fragments; HTMX swaps them into the page. Django stays the source of truth for both data and markup.
 
-**Why `$default` catch-all route?**
-A single `$default` route forwards all methods and paths to Lambda. Django's URL router handles routing internally — this avoids having to define an API Gateway route for every Django URL.
+**Why Tailwind CDN?**
+Serving static files through Lambda means every CSS/JS request triggers a Lambda invocation. CDN scripts load directly in the browser — Lambda is never involved.
 
-**Why Tailwind CDN instead of WhiteNoise?**
-Serving static files through Lambda means every CSS/JS request triggers a Lambda invocation and adds cold start latency. Tailwind CDN loads directly from the internet in the browser — Lambda is never involved.
+**Why SSM Parameter Store for the database URL?**
+Plain-text Lambda environment variables are visible in the AWS console and in Terraform state. SSM `SecureString` encrypts the value with KMS. Lambda reads it at cold start using its IAM role — no credentials in the console, no credentials in state output.
+
+**Why `api_gateway_base_path="/dev"` in Mangum?**
+API Gateway v2 includes the stage name in the path sent to Lambda (e.g. `/dev/items/`). Mangum strips the prefix so Django sees `/items/` and matches routes correctly.
+
+**Why `FORCE_SCRIPT_NAME = "/dev"` in prod settings?**
+Without it, Django's `{% url %}` and `redirect()` generate paths without the stage prefix (e.g. `/items/`), which 404 behind API Gateway. `FORCE_SCRIPT_NAME` prepends `/dev` to every generated URL.
 
 **Why settings split (base/dev/prod)?**
-`DJANGO_SETTINGS_MODULE=config.settings.prod` is set as a Lambda environment variable. Dev settings (DEBUG=True) are used locally via `manage.py`. This prevents debug output from ever reaching production.
-
-**Why `api_gateway_base_path="/dev"`?**
-API Gateway v2 includes the stage name (`dev`) in the path it sends to Lambda (e.g. `/dev/`). Mangum's `api_gateway_base_path` strips the prefix so Django sees `/` and matches routes correctly.
+`DJANGO_SETTINGS_MODULE=config.settings.prod` is set on Lambda. Dev settings (DEBUG=True, no SSM) are used locally. Debug output never reaches production.
 
 ---
 
@@ -239,19 +285,20 @@ API Gateway v2 includes the stage name (`dev`) in the path it sends to Lambda (e
 | Variable | Value | Description |
 |----------|-------|-------------|
 | `DJANGO_SETTINGS_MODULE` | `config.settings.prod` | Activates production settings |
-| `ENVIRONMENT` | `dev` | Passed to Django as a template/logic variable |
-| `DJANGO_SECRET_KEY` | *(set manually in Lambda console or via Terraform variable)* | Django secret key |
+| `ENVIRONMENT` | `dev` | Used in `FORCE_SCRIPT_NAME` and SSM parameter path |
+| `DJANGO_SECRET_KEY` | *(set in Lambda console or via Terraform)* | Django secret key |
+| `SSM_DATABASE_URL_NAME` | `/serverless-web-app/dev/database-url` | SSM path — Lambda fetches DB URL from here |
 
 ---
 
 ## Estimated AWS Costs
 
-This stack is extremely low cost for a personal or small project:
-
-| Service | Free Tier | Typical cost after |
-|---------|-----------|-------------------|
-| Lambda | 1M requests/mo free | ~$0.20 per 1M requests |
-| API Gateway | 1M requests/mo free | ~$1.00 per 1M requests |
-| CloudWatch Logs | 5GB ingestion free | ~$0.50/GB |
-| S3 (state) | Minimal — state files are KB-sized | < $0.01/mo |
-| DynamoDB (lock) | 25GB + 200M requests free | $0 for this use case |
+| Service | Free Tier | Cost after free tier |
+|---------|-----------|----------------------|
+| Lambda | 1M requests/mo | ~$0.20 per 1M requests |
+| API Gateway | 1M requests/mo | ~$1.00 per 1M requests |
+| CloudWatch Logs | 5GB ingestion | ~$0.50/GB |
+| S3 (state) | Minimal | < $0.01/mo |
+| DynamoDB (lock) | 25GB + 200M requests | $0 for this use case |
+| SSM Parameter Store | 10,000 API calls/mo | $0 for this use case |
+| Neon PostgreSQL | 0.5GB storage | $0 on free tier |
