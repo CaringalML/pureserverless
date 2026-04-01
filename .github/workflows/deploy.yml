@@ -128,14 +128,14 @@ jobs:
 
       # ── Apply ─────────────────────────────────────────────────────────────────
       - name: Terraform Apply
-        if: github.ref == 'refs/heads/hello-world' && github.event_name == 'push'
+        if: (github.ref == 'refs/heads/hello-world' || github.ref == 'refs/heads/CRUD') && github.event_name == 'push'
         env:
           TF_VAR_database_url: ${{ secrets.DATABASE_URL }}
         run: terraform apply -auto-approve tfplan
 
       # ── Outputs ───────────────────────────────────────────────────────────────
       - name: Terraform Output
-        if: github.ref == 'refs/heads/hello-world' && github.event_name == 'push'
+        if: (github.ref == 'refs/heads/hello-world' || github.ref == 'refs/heads/CRUD') && github.event_name == 'push'
         run: |
           echo "========================================"
           echo "       DEPLOYMENT OUTPUTS"
