@@ -18,7 +18,7 @@ resource "aws_lambda_function" "serverless_web_app" {
   environment {
     variables = {
       ENVIRONMENT        = var.environment
-      DJANGO_SETTINGS_MODULE = "settings"
+      DJANGO_SETTINGS_MODULE = "config.settings.prod"
     }
   }
 
