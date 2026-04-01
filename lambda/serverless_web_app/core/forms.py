@@ -14,6 +14,6 @@ class ItemForm(forms.ModelForm):
             "description": forms.Textarea(attrs={
                 "class": "w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-sky-500",
                 "placeholder": "Description (optional)",
-                "rows": 4,
+                "rows": 3,
             }),
         }

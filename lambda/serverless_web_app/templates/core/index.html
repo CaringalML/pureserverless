@@ -3,50 +3,41 @@
 {% block title %}Items — Serverless Web App{% endblock %}
 
 {% block content %}
-<div class="w-full max-w-3xl">
+<div class="w-full max-w-3xl"
+     x-data="{ showCreate: false }"
+     @item-created.window="showCreate = false; document.getElementById('empty-state')?.remove()">
 
     <div class="flex items-center justify-between mb-6">
         <h1 class="text-3xl font-bold">Items</h1>
-        <a href="{% url 'item_create' %}"
-           class="bg-sky-500 hover:bg-sky-600 text-white font-semibold px-5 py-2 rounded-lg transition">
-            + New Item
-        </a>
+        <button @click="showCreate = !showCreate"
+                class="bg-sky-500 hover:bg-sky-600 text-white font-semibold px-5 py-2 rounded-lg transition">
+            <span x-text="showCreate ? '✕ Cancel' : '+ New Item'"></span>
+        </button>
     </div>
 
-    {% if items %}
-    <div class="space-y-3">
+    <!-- Inline create form -->
+    <div x-show="showCreate" x-cloak
+         x-transition:enter="transition ease-out duration-150"
+         x-transition:enter-start="opacity-0 -translate-y-1"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         class="mb-6">
+        {% include "core/partials/create_form.html" %}
+    </div>
+
+    <!-- Items list -->
+    <div id="items-list" class="space-y-3">
         {% for item in items %}
-        <div class="bg-slate-800 border border-slate-700 rounded-xl px-6 py-4 flex items-center justify-between">
-            <div>
-                <a href="{% url 'item_detail' item.pk %}"
-                   class="text-lg font-semibold text-slate-100 hover:text-sky-400 transition">
-                    {{ item.name }}
-                </a>
-                {% if item.description %}
-                <p class="text-slate-400 text-sm mt-0.5 truncate max-w-sm">{{ item.description }}</p>
-                {% endif %}
-                <p class="text-slate-500 text-xs mt-1">{{ item.created_at|date:"M d, Y" }}</p>
-            </div>
-            <div class="flex gap-2 ml-4 shrink-0">
-                <a href="{% url 'item_update' item.pk %}"
-                   class="bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm px-3 py-1.5 rounded-lg transition">
-                    Edit
-                </a>
-                <a href="{% url 'item_delete' item.pk %}"
-                   class="bg-red-600 hover:bg-red-700 text-white text-sm px-3 py-1.5 rounded-lg transition">
-                    Delete
-                </a>
-            </div>
-        </div>
+            {% include "core/partials/item_row.html" %}
         {% endfor %}
     </div>
-    {% else %}
-    <div class="text-center bg-slate-800 border border-slate-700 rounded-xl py-16">
+
+    {% if not items %}
+    <div id="empty-state" class="text-center bg-slate-800 border border-slate-700 rounded-xl py-16">
         <p class="text-slate-400 text-lg">No items yet.</p>
-        <a href="{% url 'item_create' %}"
-           class="inline-block mt-4 bg-sky-500 hover:bg-sky-600 text-white font-semibold px-5 py-2 rounded-lg transition">
+        <button @click="showCreate = true"
+                class="inline-block mt-4 bg-sky-500 hover:bg-sky-600 text-white font-semibold px-5 py-2 rounded-lg transition">
             Create your first item
-        </a>
+        </button>
     </div>
     {% endif %}
 
