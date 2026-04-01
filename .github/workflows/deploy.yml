@@ -3,10 +3,10 @@ name: Deploy Infrastructure
 on:
   push:
     branches:
-      - main
+      - hello-world
   pull_request:
     branches:
-      - main
+      - hello-world
 
 env:
   AWS_REGION: ap-southeast-2
@@ -136,12 +136,12 @@ jobs:
       # ── Apply — only on direct pushes to main (not PRs) ─────────────────────
       # Uploads the packaged zip to Lambda and saves state to S3
       - name: Terraform Apply
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: github.ref == 'refs/heads/hello-world' && github.event_name == 'push'
         run: terraform apply -auto-approve tfplan
 
       # ── Outputs — print deployed resource URLs to the Actions log ────────────
       - name: Terraform Output
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: github.ref == 'refs/heads/hello-world' && github.event_name == 'push'
         run: |
           echo "========================================"
           echo "       DEPLOYMENT OUTPUTS"
