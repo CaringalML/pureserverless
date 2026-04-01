@@ -26,9 +26,11 @@ resource "aws_apigatewayv2_integration" "serverless_web_app" {
   integration_method = "POST"
 }
 
+# Catch-all route — forwards every method and path to Lambda.
+# Django + WhiteNoise handle routing internally (pages, static files, 404s).
 resource "aws_apigatewayv2_route" "serverless_web_app" {
   api_id    = aws_apigatewayv2_api.serverless_web_app.id
-  route_key = "GET /"
+  route_key = "$default"
   target    = "integrations/${aws_apigatewayv2_integration.serverless_web_app.id}"
 }
 
