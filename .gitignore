@@ -27,6 +27,9 @@ lambda/**/bin/
 lambda/**/lib/
 lambda/**/lib64
 
+# Terraform variable files with secrets
+terraform.tfvars
+
 # Environment / secrets
 *.env
 .env*

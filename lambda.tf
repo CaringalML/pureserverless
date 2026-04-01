@@ -19,7 +19,8 @@ resource "aws_lambda_function" "serverless_web_app" {
     variables = {
       ENVIRONMENT            = var.environment
       DJANGO_SETTINGS_MODULE = "config.settings.prod"
-      DATABASE_URL           = var.database_url
+      # Credentials are fetched from SSM at runtime — not stored as plain text here
+      SSM_DATABASE_URL_NAME  = aws_ssm_parameter.database_url.name
     }
   }
 

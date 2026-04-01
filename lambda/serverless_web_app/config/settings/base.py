@@ -6,6 +6,26 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "change-me-in-production")
 
+
+def _get_database_url():
+    """
+    Fetch the database URL from SSM Parameter Store when running on Lambda.
+    Falls back to DATABASE_URL env var for local development.
+    """
+    # Local dev: set DATABASE_URL directly in the environment
+    if url := os.environ.get("DATABASE_URL"):
+        return url
+
+    # Lambda: fetch from SSM using the parameter name injected as an env var
+    param_name = os.environ.get("SSM_DATABASE_URL_NAME")
+    if param_name:
+        import boto3
+        ssm = boto3.client("ssm", region_name=os.environ.get("AWS_REGION", "ap-southeast-2"))
+        response = ssm.get_parameter(Name=param_name, WithDecryption=True)
+        return response["Parameter"]["Value"]
+
+    return None
+
 ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [
@@ -36,10 +56,9 @@ TEMPLATES = [
     },
 ]
 
-# Neon Postgres — DATABASE_URL set as Lambda env var / GitHub secret
 DATABASES = {
-    "default": dj_database_url.config(
-        env="DATABASE_URL",
+    "default": dj_database_url.parse(
+        _get_database_url(),
         conn_max_age=60,
         ssl_require=True,
     )
