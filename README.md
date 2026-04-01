@@ -196,6 +196,21 @@ All CRUD operations run without full page reloads. Django views detect the `HX-R
 
 ---
 
+## Rate Limiting
+
+Throttling is configured on the API Gateway stage in [apigateway.tf](apigateway.tf):
+
+```hcl
+default_route_settings {
+  throttling_rate_limit  = 100  # max sustained requests per second
+  throttling_burst_limit = 200  # max requests allowed during a traffic spike
+}
+```
+
+Requests that exceed these limits receive `429 Too Many Requests` from API Gateway — Lambda is never invoked, the database is never touched, and you are never billed for the excess traffic. Adjust the values in `apigateway.tf` and push to redeploy.
+
+---
+
 ## Database Credentials Flow
 
 ```
@@ -248,7 +263,7 @@ aws dynamodb delete-item \
 | File | Resources |
 |------|-----------|
 | `lambda.tf` | `aws_lambda_function`, `archive_file` (zips Django app) |
-| `apigateway.tf` | HTTP API, stage, integration, `$default` catch-all route, Lambda permission |
+| `apigateway.tf` | HTTP API, stage (with throttling), integration, `$default` catch-all route, Lambda permission |
 | `iam.tf` | Lambda execution role, `AWSLambdaBasicExecutionRole`, SSM read policy |
 | `ssm.tf` | `aws_ssm_parameter` — database URL as `SecureString` |
 | `cloudwatch.tf` | Log group `/aws/lambda/serverless-web-app-dev` (14-day retention) |
@@ -277,6 +292,9 @@ Without it, Django's `{% url %}` and `redirect()` generate paths without the sta
 
 **Why settings split (base/dev/prod)?**
 `DJANGO_SETTINGS_MODULE=config.settings.prod` is set on Lambda. Dev settings (DEBUG=True, no SSM) are used locally. Debug output never reaches production.
+
+**Why stage-level throttling on API Gateway?**
+Without throttling, a DDoS or traffic spike invokes Lambda on every single request — each invocation costs money and hammers the database. Setting `throttling_rate_limit = 100` and `throttling_burst_limit = 200` on the stage means API Gateway returns `429 Too Many Requests` for excess traffic before it ever reaches Lambda. The database and your AWS bill are protected at the network edge.
 
 ---
 
