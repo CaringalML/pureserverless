@@ -43,3 +43,26 @@ resource "aws_iam_role_policy" "lambda_ssm" {
     ]
   })
 }
+
+# Allow Lambda to call Cognito on behalf of the application
+resource "aws_iam_role_policy" "lambda_cognito" {
+  name = "${var.lambda_function_name}-${var.environment}-cognito-policy"
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "cognito-idp:SignUp",
+          "cognito-idp:ConfirmSignUp",
+          "cognito-idp:InitiateAuth",
+          "cognito-idp:GetUser",
+          "cognito-idp:GlobalSignOut",
+        ]
+        Resource = aws_cognito_user_pool.main.arn
+      }
+    ]
+  })
+}

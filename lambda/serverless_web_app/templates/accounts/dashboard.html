@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — Serverless Web App{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-2xl">
+
+    <div class="flex items-center justify-between mb-8">
+        <h1 class="text-3xl font-bold">Dashboard</h1>
+        <a href="{% url 'signout' %}"
+           class="bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-semibold px-4 py-2 rounded-lg transition">
+            Sign out
+        </a>
+    </div>
+
+    <!-- Profile card -->
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-8 mb-6">
+        <div class="flex items-center gap-5 mb-6">
+            <!-- Avatar initials -->
+            <div class="w-16 h-16 rounded-full bg-sky-500 flex items-center justify-center text-2xl font-bold text-white shrink-0">
+                {{ user.email|first|upper }}
+            </div>
+            <div>
+                <p class="text-xl font-semibold text-slate-100">{{ user.email }}</p>
+                <span class="inline-flex items-center gap-1.5 mt-1 text-xs font-medium px-2 py-0.5 rounded-full
+                    {% if user.email_verified %}bg-green-900/50 text-green-400 border border-green-700
+                    {% else %}bg-yellow-900/50 text-yellow-400 border border-yellow-700{% endif %}">
+                    {% if user.email_verified %}
+                        &#10003; Email verified
+                    {% else %}
+                        &#9888; Email not verified
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+
+        <div class="divide-y divide-slate-700">
+            <div class="flex justify-between py-3 text-sm">
+                <span class="text-slate-400">Email</span>
+                <span class="text-slate-100">{{ user.email }}</span>
+            </div>
+            <div class="flex justify-between py-3 text-sm">
+                <span class="text-slate-400">Username</span>
+                <span class="text-slate-100 font-mono text-xs">{{ user.username }}</span>
+            </div>
+            <div class="flex justify-between py-3 text-sm">
+                <span class="text-slate-400">User ID</span>
+                <span class="text-slate-500 font-mono text-xs truncate max-w-xs">{{ user.sub }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick links -->
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-6">
+        <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wide mb-4">Quick links</h2>
+        <div class="flex gap-3">
+            <a href="{% url 'index' %}"
+               class="bg-sky-500 hover:bg-sky-600 text-white font-semibold px-5 py-2 rounded-lg transition text-sm">
+                View Items
+            </a>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

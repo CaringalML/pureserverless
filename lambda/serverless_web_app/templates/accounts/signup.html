@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Sign Up — Serverless Web App{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-md">
+
+    <div class="text-center mb-8">
+        <h1 class="text-3xl font-bold">Create an account</h1>
+        <p class="text-slate-400 mt-2">Already have one?
+            <a href="{% url 'signin' %}" class="text-sky-400 hover:underline">Sign in</a>
+        </p>
+    </div>
+
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-8">
+        <form method="post" class="space-y-4">
+            {% csrf_token %}
+
+            {% if form.non_field_errors %}
+            <div class="bg-red-900/40 border border-red-600 rounded-lg px-4 py-3 text-red-300 text-sm">
+                {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+            </div>
+            {% endif %}
+
+            <div>
+                <label class="block text-sm text-slate-400 mb-1">Email</label>
+                {{ form.email }}
+            </div>
+            <div>
+                <label class="block text-sm text-slate-400 mb-1">Password</label>
+                {{ form.password }}
+                <p class="text-slate-500 text-xs mt-1">Min 8 characters — uppercase, lowercase, number required.</p>
+            </div>
+
+            <button type="submit"
+                    class="w-full bg-sky-500 hover:bg-sky-600 text-white font-semibold py-2.5 rounded-lg transition mt-2">
+                Create account
+            </button>
+        </form>
+    </div>
+
+</div>
+{% endblock %}

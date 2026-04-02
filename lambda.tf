@@ -19,8 +19,11 @@ resource "aws_lambda_function" "serverless_web_app" {
     variables = {
       ENVIRONMENT            = var.environment
       DJANGO_SETTINGS_MODULE = "config.settings.prod"
-      # Credentials are fetched from SSM at runtime — not stored as plain text here
+      # DB credentials fetched from SSM at runtime — not stored as plain text here
       SSM_DATABASE_URL_NAME  = aws_ssm_parameter.database_url.name
+      # Cognito — IDs are not secrets, but the actual auth is enforced by Cognito itself
+      COGNITO_USER_POOL_ID   = aws_cognito_user_pool.main.id
+      COGNITO_CLIENT_ID      = aws_cognito_user_pool_client.main.id
     }
   }
 
