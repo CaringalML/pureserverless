@@ -5,7 +5,7 @@ from django.shortcuts import render, redirect
 from django.urls import reverse
 
 from .decorators import cognito_login_required
-from .forms import SignUpForm, VerifyForm, SignInForm
+from .forms import SignUpForm, VerifyForm, SignInForm, ForgotPasswordForm, ResetPasswordForm
 
 
 def _cognito():
@@ -68,6 +68,40 @@ def signin(request):
     return render(request, "accounts/signin.html", {"form": form})
 
 
+def forgot_password(request):
+    form = ForgotPasswordForm(request.POST or None)
+    if form.is_valid():
+        email = form.cleaned_data["email"]
+        try:
+            _cognito().forgot_password(
+                ClientId=settings.COGNITO_CLIENT_ID,
+                Username=email,
+            )
+        except ClientError as e:
+            form.add_error(None, e.response["Error"]["Message"])
+            return render(request, "accounts/forgot_password.html", {"form": form})
+        url = reverse("reset_password") + f"?email={email}"
+        return redirect(url)
+    return render(request, "accounts/forgot_password.html", {"form": form})
+
+
+def reset_password(request):
+    email = request.GET.get("email", "")
+    form = ResetPasswordForm(request.POST or None, initial={"email": email})
+    if form.is_valid():
+        try:
+            _cognito().confirm_forgot_password(
+                ClientId=settings.COGNITO_CLIENT_ID,
+                Username=form.cleaned_data["email"],
+                ConfirmationCode=form.cleaned_data["code"],
+                Password=form.cleaned_data["new_password"],
+            )
+            return redirect("signin")
+        except ClientError as e:
+            form.add_error(None, e.response["Error"]["Message"])
+    return render(request, "accounts/reset_password.html", {"form": form, "email": email})
+
+
 @cognito_login_required
 def dashboard(request):
     try:
@@ -80,7 +114,6 @@ def dashboard(request):
             "username":       resp["Username"],
         }
     except ClientError:
-        # Token expired or revoked — force re-login
         request.session.flush()
         return redirect("signin")
     return render(request, "accounts/dashboard.html", {"user": user})
