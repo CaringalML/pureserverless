@@ -44,7 +44,10 @@ jobs:
         run: |
           LAMBDA_DIR="lambda/serverless_web_app"
           if [ -f "$LAMBDA_DIR/requirements.txt" ]; then
+            # Install into Lambda folder for packaging
             pip install -r "$LAMBDA_DIR/requirements.txt" -t "$LAMBDA_DIR/" --upgrade --no-cache-dir
+            # Install into system Python so manage.py can import them during migrations
+            pip install -r "$LAMBDA_DIR/requirements.txt" --upgrade --no-cache-dir
           fi
 
       # Automatically runs migrations for CRUD and auth branches.
