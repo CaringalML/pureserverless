@@ -6,17 +6,58 @@
     <meta name="csrf-token" content="{{ csrf_token }}">
     <title>{% block title %}Serverless Web App{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <script>
-        // Send CSRF token with every HTMX request (POST, PUT, PATCH, DELETE)
-        document.addEventListener('htmx:configRequest', (evt) => {
-            evt.detail.headers['X-CSRFToken'] =
-                document.querySelector('meta[name="csrf-token"]').content;
-        });
-    </script>
     <style>
         [x-cloak] { display: none !important; }
+
+        /* Press-down effect on all primary buttons */
+        .btn-primary {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background-color: #0ea5e9;
+            color: #fff;
+            font-weight: 600;
+            padding: 10px 20px;
+            border-radius: 10px;
+            border: none;
+            cursor: pointer;
+            transition: background-color 150ms ease, transform 100ms ease, box-shadow 150ms ease;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 0 0 0 rgba(56,189,248,0);
+            width: 100%;
+        }
+        .btn-primary:hover {
+            background-color: #0284c7;
+            box-shadow: 0 4px 14px rgba(14,165,233,0.35);
+        }
+        .btn-primary:active {
+            transform: scale(0.97);
+            background-color: #0369a1;
+            box-shadow: none;
+        }
+        .btn-primary:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Spinner */
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            flex-shrink: 0;
+        }
+
+        /* Input focus glow */
+        input:focus, textarea:focus {
+            outline: none;
+        }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
@@ -24,15 +65,16 @@
 
     <nav class="bg-slate-800 border-b border-slate-700 px-6 py-4">
         <div class="max-w-3xl mx-auto flex items-center justify-between">
-            <a href="{% url 'signin' %}" class="text-sky-400 font-bold text-lg tracking-wide">Serverless Web App</a>
+            <a href="{% url 'signin' %}" class="text-sky-400 font-bold text-lg tracking-wide hover:text-sky-300 transition">Serverless Web App</a>
             <div class="flex items-center gap-4 text-sm">
                 {% if request.session.access_token %}
-                    <a href="{% url 'dashboard' %}" class="text-slate-300 hover:text-sky-400 transition">Dashboard</a>
-                    <a href="{% url 'signout' %}" class="text-slate-400 hover:text-slate-200 transition">Sign out</a>
+                    <a href="{% url 'dashboard' %}" class="text-slate-300 hover:text-sky-400 transition-colors duration-150">Dashboard</a>
+                    <a href="{% url 'signout' %}"
+                       class="text-slate-400 hover:text-slate-200 transition-colors duration-150">Sign out</a>
                 {% else %}
-                    <a href="{% url 'signin' %}" class="text-slate-300 hover:text-sky-400 transition">Sign in</a>
+                    <a href="{% url 'signin' %}" class="text-slate-300 hover:text-sky-400 transition-colors duration-150">Sign in</a>
                     <a href="{% url 'signup' %}"
-                       class="bg-sky-500 hover:bg-sky-600 text-white font-semibold px-4 py-1.5 rounded-lg transition">
+                       class="bg-sky-500 hover:bg-sky-600 active:scale-95 active:bg-sky-700 text-white font-semibold px-4 py-1.5 rounded-lg transition-all duration-150 shadow-sm hover:shadow-sky-500/30 hover:shadow-md">
                         Sign up
                     </a>
                 {% endif %}
@@ -45,7 +87,7 @@
     </main>
 
     <footer class="bg-slate-800 border-t border-slate-700 text-center py-4 text-slate-500 text-sm">
-        Powered by Django, HTMX &amp; Alpine.js on AWS Lambda
+        Powered by Django &amp; Alpine.js on AWS Lambda
     </footer>
 
     {% block extra_js %}{% endblock %}

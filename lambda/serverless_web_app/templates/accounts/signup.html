@@ -13,7 +13,7 @@
     </div>
 
     <div class="bg-slate-800 border border-slate-700 rounded-xl p-8">
-        <form method="post" class="space-y-4">
+        <form method="post" class="space-y-4" x-data="{ loading: false }" @submit="loading = true">
             {% csrf_token %}
 
             {% if form.non_field_errors %}
@@ -39,9 +39,9 @@
                 {% endif %}
             </div>
 
-            <button type="submit"
-                    class="w-full bg-sky-500 hover:bg-sky-600 text-white font-semibold py-2.5 rounded-lg transition mt-2">
-                Create account
+            <button type="submit" class="btn-primary mt-2" :disabled="loading">
+                <span class="spinner" x-show="loading" x-cloak></span>
+                <span x-text="loading ? 'Creating account…' : 'Create account'">Create account</span>
             </button>
         </form>
     </div>
