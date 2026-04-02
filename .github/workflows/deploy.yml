@@ -9,19 +9,16 @@ env:
 
 on:
   push:
-    # This uses a wildcard to trigger on any branch, 
-    # but the Job itself will filter based on your TARGET_BRANCH above.
-    branches: ["**"] 
+    # EDIT THIS to match TARGET_BRANCH above
+    branches: ["auth"]
   pull_request:
-    branches: ["**"]
+    branches: ["auth"]
   workflow_dispatch:
 
 jobs:
   deploy:
     name: Deploying ${{ github.ref_name }}
     runs-on: ubuntu-latest
-    # This line ensures the CI only runs if the push matches your TARGET_BRANCH
-    if: github.ref_name == vars.TARGET_BRANCH || github.event.inputs.branch == vars.TARGET_BRANCH || contains(github.ref, 'refs/heads/') 
     
     permissions:
       contents: read
