@@ -32,7 +32,6 @@ INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.staticfiles",
     "django.contrib.sessions",
-    "core",
     "accounts",
 ]
 

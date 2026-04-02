@@ -50,9 +50,7 @@ jobs:
             pip install -r "$LAMBDA_DIR/requirements.txt" --upgrade --no-cache-dir
           fi
 
-      # Automatically runs migrations for CRUD and auth branches.
       - name: Run database migrations
-        if: env.TARGET_BRANCH == 'CRUD' || env.TARGET_BRANCH == 'auth'
         working-directory: lambda/serverless_web_app
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
