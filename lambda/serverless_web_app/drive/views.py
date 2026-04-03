@@ -1,7 +1,10 @@
 import datetime
 import json
+import logging
 import uuid
 from urllib.parse import quote
+
+logger = logging.getLogger(__name__)
 
 import resend
 
@@ -402,8 +405,8 @@ def archive_files(request):
     if user_email and archived_names:
         try:
             _send_archive_email(user_email, archived_names)
-        except Exception:
-            pass  # Email failure must not break the archive response
+        except Exception as email_err:
+            logger.error("archive email failed: %s", email_err, exc_info=True)
 
     return JsonResponse({"updated": updated_html})
 
@@ -461,8 +464,8 @@ def restore_file(request, pk):
     if user_email:
         try:
             _send_restore_started_email(user_email, file.name)
-        except Exception:
-            pass  # Email failure must not break the restore response
+        except Exception as email_err:
+            logger.error("restore email failed: %s", email_err, exc_info=True)
 
     html = render(request, "drive/partials/file_row.html", {"file": file}).content.decode()
     return HttpResponse(html, content_type="text/html")
