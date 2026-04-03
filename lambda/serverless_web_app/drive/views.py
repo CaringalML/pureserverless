@@ -225,6 +225,26 @@ def confirm_upload(request):
 
 
 @cognito_login_required
+def download_file(request, pk):
+    """Redirect to a presigned S3 GET URL with Content-Disposition: attachment."""
+    file = get_object_or_404(DriveFile, pk=pk, owner_sub=_get_owner_sub(request))
+    if file.is_archived():
+        return HttpResponse("This file is archived and cannot be downloaded directly.", status=400)
+
+    presigned_url = _s3().generate_presigned_url(
+        "get_object",
+        Params={
+            "Bucket": settings.DRIVE_BUCKET_NAME,
+            "Key": file.s3_key,
+            "ResponseContentDisposition": f'attachment; filename="{quote(file.name)}"',
+            "ResponseContentType": file.content_type,
+        },
+        ExpiresIn=300,
+    )
+    return redirect(presigned_url)
+
+
+@cognito_login_required
 def get_file_url(request, pk):
     """Return a signed CloudFront URL as JSON for the in-browser preview modal."""
     file = get_object_or_404(DriveFile, pk=pk, owner_sub=_get_owner_sub(request))

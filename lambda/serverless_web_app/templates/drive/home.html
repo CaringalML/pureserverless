@@ -30,7 +30,7 @@
         preview: null,
 
         async openPreview(pk) {
-            this.preview = { loading: true, name: '', url: '', content_type: '', size: '' };
+            this.preview = { loading: true, name: '', url: '', content_type: '', size: '', pk: pk };
             try {
                 const resp = await fetch(`/drive/view/${pk}/url/`, {
                     headers: { 'X-CSRFToken': this.csrf() },
@@ -41,7 +41,7 @@
                     this.preview = null;
                     return;
                 }
-                this.preview = { ...data, loading: false };
+                this.preview = { ...data, loading: false, pk: pk };
             } catch (err) {
                 alert('Could not load preview: ' + err.message);
                 this.preview = null;
@@ -386,11 +386,9 @@
             </div>
             <div class="flex items-center gap-2 shrink-0 ml-4">
                 {# Download button #}
-                <a :href="preview?.url"
-                   target="_blank"
-                   rel="noopener"
+                <a :href="`/drive/download/${preview?.pk}/`"
                    class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors duration-150"
-                   title="Open / Download">
+                   title="Download file">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0 0l-4-4m4 4l4-4"/></svg>
                     Download
                 </a>
