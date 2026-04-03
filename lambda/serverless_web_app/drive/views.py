@@ -88,7 +88,16 @@ def drive_home(request, folder_pk=None):
         current_folder = get_object_or_404(DriveFolder, pk=folder_pk, owner_sub=owner_sub)
         breadcrumbs = _build_breadcrumbs(current_folder)
 
-    files = DriveFile.objects.filter(owner_sub=owner_sub, folder=current_folder, deleted_at__isnull=True)
+    from django.db.models import Q
+    files = DriveFile.objects.filter(
+        owner_sub=owner_sub,
+        folder=current_folder,
+        deleted_at__isnull=True,
+    ).filter(
+        # Show standard-tier files, or archived files that have been restored (ready)
+        Q(storage_class__in=(DriveFile.STANDARD, DriveFile.STANDARD_IA, DriveFile.GLACIER_IR))
+        | Q(storage_class__in=(DriveFile.GLACIER, DriveFile.DEEP_ARCHIVE), restore_status=DriveFile.RESTORE_READY)
+    )
     subfolders = DriveFolder.objects.filter(owner_sub=owner_sub, parent=current_folder)
 
     # Sidebar: top-level folders with one level of children pre-fetched
