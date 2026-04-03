@@ -460,6 +460,7 @@ def restore_file(request, pk):
         )
     except ClientError as e:
         code = e.response["Error"]["Code"]
+        logger.error("restore_object failed code=%s err=%s", code, e)
         if code != "RestoreAlreadyInProgress":
             return JsonResponse({"error": str(e)}, status=400)
 
