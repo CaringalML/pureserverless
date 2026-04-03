@@ -3,6 +3,7 @@ import json
 import uuid
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
 from botocore.signers import CloudFrontSigner
 from cryptography.hazmat.primitives import hashes, serialization
@@ -22,7 +23,11 @@ from .models import DriveFile
 # ---------------------------------------------------------------------------
 
 def _s3():
-    return boto3.client("s3", region_name=settings.AWS_REGION)
+    return boto3.client(
+        "s3",
+        region_name=settings.AWS_REGION,
+        config=Config(signature_version="s3v4"),
+    )
 
 
 def _get_owner_sub(request):
