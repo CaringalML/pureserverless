@@ -478,6 +478,55 @@ Mobile and SPA clients cannot safely store a client secret. Since Lambda handles
 
 ---
 
+## Troubleshooting
+
+### CRITICAL: S3 Direct Upload CORS Failure — "No Access-Control-Allow-Origin"
+
+**Symptom:** Browser console shows:
+```
+Access to XMLHttpRequest at 'https://bucket.s3.amazonaws.com/' from origin 'https://your-domain.com'
+has been blocked by CORS policy: Response to preflight request doesn't pass access control check:
+No 'Access-Control-Allow-Origin' header is present on the requested resource.
+```
+
+Upload stays at 0% and throws "Network error uploading to S3".
+
+**Root cause:** boto3's `generate_presigned_post` defaults to the **global** S3 endpoint (`s3.amazonaws.com`) even when `region_name` is set. The S3 bucket is in `ap-southeast-2`. When the browser POSTs to the global endpoint, S3 returns a redirect to the regional endpoint. Chrome/Edge send a CORS preflight before following that redirect — and the global endpoint does not return `Access-Control-Allow-Origin` headers for a bucket in another region. Preflight fails → upload blocked.
+
+Adding `Config(signature_version="s3v4")` alone does **not** fix this — it changes the signing algorithm but the presigned URL endpoint URL remains `s3.amazonaws.com`.
+
+**Fix:** Explicitly pin the S3 client to the regional endpoint with `endpoint_url`:
+
+```python
+# drive/views.py
+from botocore.config import Config
+
+def _s3():
+    return boto3.client(
+        "s3",
+        region_name=settings.AWS_REGION,
+        endpoint_url=f"https://s3.{settings.AWS_REGION}.amazonaws.com",  # ← CRITICAL
+        config=Config(signature_version="s3v4"),
+    )
+```
+
+**How to verify the fix worked:** Open browser DevTools → Console. The upload log line should show the regional URL:
+```
+# Bad  (global endpoint — will CORS fail):
+[StrawDrive] Uploading to: https://serverless-web-app-drive-dev.s3.amazonaws.com/
+
+# Good (regional endpoint — works):
+[StrawDrive] Uploading to: https://s3.ap-southeast-2.amazonaws.com/serverless-web-app-drive-dev
+```
+
+S3 response status `204` confirms a successful upload.
+
+**Why this works:** `endpoint_url` overrides boto3's endpoint resolution entirely. The presigned POST URL is built from this exact host, so the browser's XHR goes directly to the regional bucket endpoint — no redirect, no CORS preflight mismatch.
+
+> This applies to any AWS region. Replace `ap-southeast-2` with your region. The S3 CORS `allowed_origins` must also match the domain the browser is uploading from (already configured in `s3_drive.tf`).
+
+---
+
 ## Estimated AWS Costs
 
 | Service | Free Tier | After free tier |
