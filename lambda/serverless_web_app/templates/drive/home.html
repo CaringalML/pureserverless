@@ -2,18 +2,34 @@
 
 {% block title %}StrawDrive{% endblock %}
 
+{# Full-bleed layout — sidebar + main content side by side #}
+{% block main_class %}flex-1 flex overflow-hidden{% endblock %}
+
 {% block content %}
-<div class="w-full max-w-5xl"
+{# ── Alpine scope covers the entire page ────────────────────────────────── #}
+<div class="flex flex-1 overflow-hidden"
      x-data="{
+        /* ── upload ── */
         uploading: false,
         uploadProgress: 0,
         uploadLabel: '',
+
+        /* ── new-folder inline input ── */
+        creatingFolder: false,
+        newFolderName: '',
+
+        /* ── archive toolbar ── */
         selected: [],
         archiveClass: 'GLACIER',
         archiving: false,
+
+        /* ── sidebar collapse (mobile) ── */
+        sidebarOpen: true,
+
         csrf() {
             return document.querySelector('meta[name=csrf-token]').content;
         },
+
         toggleSelect(id) {
             if (this.selected.includes(id)) {
                 this.selected = this.selected.filter(x => x !== id);
@@ -22,56 +38,46 @@
             }
         },
         isSelected(id) { return this.selected.includes(id); },
+
         async handleUpload(event) {
             const file = event.target.files[0];
             if (!file) return;
 
-            this.uploading = true;
+            this.uploading      = true;
             this.uploadProgress = 0;
-            this.uploadLabel = file.name;
+            this.uploadLabel    = file.name;
 
             try {
-                // Step 1: get presigned POST fields from our server
-                const resp = await fetch('{% url 'drive_upload_url' %}', {
+                /* Step 1 — get presigned POST fields */
+                const resp = await fetch('{% url "drive_upload_url" %}', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': this.csrf(),
-                    },
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
                     body: JSON.stringify({
                         filename: file.name,
                         content_type: file.type || 'application/octet-stream',
                     }),
                 });
-                if (!resp.ok) {
-                    throw new Error(`Failed to get upload URL (HTTP ${resp.status})`);
-                }
+                if (!resp.ok) throw new Error(`Failed to get upload URL (HTTP ${resp.status})`);
                 const { url, fields, s3_key, error } = await resp.json();
-                if (error) { throw new Error('Server error: ' + error); }
+                if (error) throw new Error('Server error: ' + error);
                 console.log('[StrawDrive] Uploading to:', url, 'fields:', fields, 's3_key:', s3_key);
 
-                // Step 2: upload directly to S3 with XHR so we get progress events
+                /* Step 2 — XHR directly to S3 with progress events */
                 await new Promise((resolve, reject) => {
                     const form = new FormData();
                     Object.entries(fields).forEach(([k, v]) => form.append(k, v));
-                    form.append('file', file);  // file must be last field for S3 POST
+                    form.append('file', file);
 
                     const xhr = new XMLHttpRequest();
                     xhr.open('POST', url);
-
                     xhr.upload.addEventListener('progress', (e) => {
-                        if (e.lengthComputable) {
+                        if (e.lengthComputable)
                             this.uploadProgress = Math.round((e.loaded / e.total) * 90);
-                        }
                     });
                     xhr.addEventListener('load', () => {
                         console.log('[StrawDrive] S3 response status:', xhr.status, xhr.responseText);
-                        if (xhr.status >= 200 && xhr.status < 300) {
-                            this.uploadProgress = 95;
-                            resolve();
-                        } else {
-                            reject(new Error(`S3 rejected upload (HTTP ${xhr.status}): ${xhr.responseText}`));
-                        }
+                        if (xhr.status >= 200 && xhr.status < 300) { this.uploadProgress = 95; resolve(); }
+                        else reject(new Error(`S3 rejected upload (HTTP ${xhr.status}): ${xhr.responseText}`));
                     });
                     xhr.addEventListener('error', () => {
                         console.error('[StrawDrive] XHR network error — likely CORS. Check S3 bucket CORS config.');
@@ -80,115 +86,252 @@
                     xhr.send(form);
                 });
 
-                // Step 3: confirm with server to save metadata in DB
-                const confirm = await fetch('{% url 'drive_confirm' %}', {
+                /* Step 3 — confirm with server to save metadata */
+                const confirm = await fetch('{% url "drive_confirm" %}', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': this.csrf(),
-                    },
-                    body: JSON.stringify({ filename: file.name, s3_key }),
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
+                    body: JSON.stringify({
+                        filename: file.name,
+                        s3_key,
+                        folder_pk: {{ current_folder.pk|default:'null' }},
+                    }),
                 });
                 const result = await confirm.json();
                 this.uploadProgress = 100;
 
                 if (result.html) {
-                    document.getElementById('file-list').insertAdjacentHTML('afterbegin', result.html);
+                    const list = document.getElementById('file-list');
+                    list.insertAdjacentHTML('afterbegin', result.html);
                     document.getElementById('empty-state')?.remove();
                 }
 
             } catch (err) {
                 alert(err.message);
             } finally {
-                await new Promise(r => setTimeout(r, 400)); // let bar reach 100% visually
-                this.uploading = false;
+                await new Promise(r => setTimeout(r, 400));
+                this.uploading      = false;
                 this.uploadProgress = 0;
-                this.uploadLabel = '';
-                event.target.value = '';
+                this.uploadLabel    = '';
+                event.target.value  = '';
+            }
+        },
+
+        async submitNewFolder() {
+            const name = this.newFolderName.trim();
+            if (!name) return;
+            try {
+                const resp = await fetch('{% url "drive_create_folder" %}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
+                    body: JSON.stringify({
+                        name,
+                        parent_pk: {{ current_folder.pk|default:'null' }},
+                    }),
+                });
+                const data = await resp.json();
+                if (data.error) { alert(data.error); return; }
+                const list = document.getElementById('folder-list');
+                list.insertAdjacentHTML('afterbegin', data.html);
+                document.getElementById('empty-state')?.remove();
+                this.newFolderName  = '';
+                this.creatingFolder = false;
+            } catch (err) {
+                alert('Could not create folder: ' + err.message);
             }
         }
      }">
 
-    <!-- Header -->
-    <div class="flex items-center justify-between mb-4">
-        <div>
-            <h1 class="text-3xl font-bold">StrawDrive</h1>
-            <p class="text-slate-400 text-sm mt-0.5">Your personal cloud storage</p>
-        </div>
-        <label class="btn-primary cursor-pointer" style="width:auto;padding:10px 20px;" :class="{ 'opacity-60 cursor-not-allowed': uploading }">
-            <svg x-show="!uploading" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 12V4m0 0L8 8m4-4l4 4"/>
-            </svg>
-            <span x-show="!uploading">Upload file</span>
-            <span x-show="uploading" x-cloak class="text-sm" x-text="`${uploadProgress}%`"></span>
-            <input type="file" class="hidden" :disabled="uploading" @change="handleUpload($event)">
-        </label>
-    </div>
+    {# ═══════════════════ SIDEBAR ═══════════════════ #}
+    <aside class="w-60 shrink-0 bg-slate-800 border-r border-slate-700 flex flex-col overflow-y-auto"
+           :class="sidebarOpen ? 'flex' : 'hidden md:flex'">
 
-    <!-- Progress bar -->
-    <div x-show="uploading" x-cloak class="mb-4">
-        <div class="flex justify-between text-xs text-slate-400 mb-1.5">
-            <span class="truncate max-w-xs" x-text="uploadLabel"></span>
-            <span x-text="`${uploadProgress}%`"></span>
+        <div class="p-4 space-y-1">
+
+            {# My Drive (root) #}
+            <a href="{% url 'drive_home' %}"
+               class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-colors duration-100
+                      {% if not current_folder %}bg-sky-600 text-white{% else %}text-slate-300 hover:bg-slate-700 hover:text-white{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h3.586a1 1 0 01.707.293L10.414 6.5H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
+                </svg>
+                My Drive
+            </a>
+
+            {# Folder tree #}
+            {% for sf in sidebar_folders %}
+            <div>
+                <a href="{% url 'drive_folder' sf.pk %}"
+                   class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors duration-100
+                          {% if current_folder.pk == sf.pk %}bg-slate-600 text-white{% else %}text-slate-400 hover:bg-slate-700 hover:text-white{% endif %}">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M10.414 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-6.586L10.414 3z"/>
+                    </svg>
+                    <span class="truncate">{{ sf.name }}</span>
+                </a>
+                {% for child in sf.subfolders.all %}
+                <a href="{% url 'drive_folder' child.pk %}"
+                   class="flex items-center gap-3 pl-8 pr-3 py-1.5 rounded-lg text-xs transition-colors duration-100
+                          {% if current_folder.pk == child.pk %}bg-slate-600 text-white{% else %}text-slate-500 hover:bg-slate-700 hover:text-white{% endif %}">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0 text-yellow-300" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M10.414 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-6.586L10.414 3z"/>
+                    </svg>
+                    <span class="truncate">{{ child.name }}</span>
+                </a>
+                {% endfor %}
+            </div>
+            {% endfor %}
         </div>
-        <div class="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
-            <div class="h-2 rounded-full bg-sky-500 transition-all duration-200 ease-out"
-                 :style="`width: ${uploadProgress}%`"
-                 :class="uploadProgress === 100 ? 'bg-green-500' : 'bg-sky-500'">
+
+        {# Storage tier legend #}
+        <div class="mt-auto p-4 border-t border-slate-700">
+            <p class="text-xs text-slate-500 font-medium mb-2">Storage tiers</p>
+            <div class="space-y-1 text-xs">
+                <div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-green-400"></span><span class="text-slate-400">Standard</span></div>
+                <div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-yellow-400"></span><span class="text-slate-400">Standard-IA</span></div>
+                <div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-blue-400"></span><span class="text-slate-400">Glacier Instant</span></div>
+                <div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-purple-400"></span><span class="text-slate-400">Glacier Flexible</span></div>
+                <div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-red-400"></span><span class="text-slate-400">Deep Archive</span></div>
             </div>
         </div>
-        <p class="text-xs text-slate-500 mt-1.5">
-            <span x-text="uploadProgress < 95 ? 'Uploading to S3…' : uploadProgress < 100 ? 'Saving…' : 'Done!'"></span>
-        </p>
-    </div>
+    </aside>
 
-    <!-- Archive toolbar — shown when files are selected -->
-    <div x-show="selected.length > 0" x-cloak x-transition
-         class="bg-slate-800 border border-slate-600 rounded-xl px-5 py-3 mb-4 flex items-center gap-4 flex-wrap">
-        <span class="text-sm text-slate-300" x-text="`${selected.length} file${selected.length > 1 ? 's' : ''} selected`"></span>
-        <select x-model="archiveClass"
-                class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500">
-            <option value="GLACIER">Glacier Flexible Retrieval</option>
-            <option value="DEEP_ARCHIVE">Deep Archive</option>
-        </select>
-        <button class="btn-primary text-sm" style="width:auto;padding:7px 16px;" :disabled="archiving"
-                @click="
-                    archiving = true;
-                    const resp = await fetch('{% url 'drive_archive' %}', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
-                        body: JSON.stringify({ ids: selected, storage_class: archiveClass })
-                    });
-                    const data = await resp.json();
-                    data.updated?.forEach(({ id, html }) => {
-                        const el = document.getElementById('file-' + id);
-                        if (el) el.outerHTML = html;
-                    });
-                    selected = [];
-                    archiving = false;
-                ">
-            <span class="spinner" x-show="archiving" x-cloak></span>
-            <span x-text="archiving ? 'Archiving…' : 'Archive'"></span>
-        </button>
-        <button class="text-slate-400 hover:text-slate-200 text-sm transition" @click="selected = []">Cancel</button>
-    </div>
+    {# ═══════════════════ MAIN CONTENT ═══════════════════ #}
+    <div class="flex-1 flex flex-col overflow-y-auto">
+        <div class="p-6 flex-1">
 
-    <!-- File list -->
-    <div id="file-list" class="space-y-2">
-        {% for file in files %}
-            {% include "drive/partials/file_row.html" %}
-        {% endfor %}
-    </div>
+            {# ── Breadcrumb ── #}
+            <nav class="flex items-center gap-1.5 text-sm mb-5 flex-wrap">
+                <a href="{% url 'drive_home' %}" class="text-sky-400 hover:text-sky-300 transition font-medium">My Drive</a>
+                {% for crumb in breadcrumbs %}
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                {% if crumb == current_folder %}
+                <span class="text-slate-200 font-medium">{{ crumb.name }}</span>
+                {% else %}
+                <a href="{% url 'drive_folder' crumb.pk %}" class="text-sky-400 hover:text-sky-300 transition">{{ crumb.name }}</a>
+                {% endif %}
+                {% endfor %}
+            </nav>
 
-    {% if not files %}
-    <div id="empty-state" class="text-center bg-slate-800 border border-slate-700 rounded-xl py-20">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto mb-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h3.586a1 1 0 01.707.293L10.414 6.5H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
-        </svg>
-        <p class="text-slate-400 text-lg">No files yet</p>
-        <p class="text-slate-500 text-sm mt-1">Upload your first file using the button above</p>
-    </div>
-    {% endif %}
+            {# ── Toolbar ── #}
+            <div class="flex items-center gap-3 mb-5 flex-wrap">
 
-</div>
+                {# New folder button / inline input #}
+                <div x-show="!creatingFolder">
+                    <button @click="creatingFolder = true; $nextTick(() => $refs.folderInput.focus())"
+                            class="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-600 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-sm font-medium transition-colors duration-150">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m-9-1V7a2 2 0 012-2h3.586a1 1 0 01.707.293L10.414 6.5H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+                        </svg>
+                        New folder
+                    </button>
+                </div>
+
+                <div x-show="creatingFolder" x-cloak class="flex items-center gap-2">
+                    <input x-ref="folderInput"
+                           x-model="newFolderName"
+                           @keydown.enter="submitNewFolder()"
+                           @keydown.escape="creatingFolder = false; newFolderName = ''"
+                           type="text"
+                           placeholder="Folder name"
+                           class="bg-slate-700 border border-slate-500 focus:border-sky-500 rounded-lg px-3 py-2 text-sm text-slate-100 w-44 transition-colors">
+                    <button @click="submitNewFolder()"
+                            class="px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white text-sm rounded-lg font-medium transition-colors">
+                        Create
+                    </button>
+                    <button @click="creatingFolder = false; newFolderName = ''"
+                            class="px-3 py-2 text-slate-400 hover:text-slate-200 text-sm transition-colors">
+                        Cancel
+                    </button>
+                </div>
+
+                {# Upload button #}
+                <label class="flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white text-sm font-semibold cursor-pointer transition-colors duration-150 ml-auto"
+                       :class="{ 'opacity-60 cursor-not-allowed': uploading }">
+                    <svg x-show="!uploading" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 12V4m0 0L8 8m4-4l4 4"/>
+                    </svg>
+                    <span x-show="!uploading">Upload file</span>
+                    <span x-show="uploading" x-cloak x-text="`${uploadProgress}%`"></span>
+                    <input type="file" class="hidden" :disabled="uploading" @change="handleUpload($event)">
+                </label>
+            </div>
+
+            {# ── Upload progress bar ── #}
+            <div x-show="uploading" x-cloak class="mb-5">
+                <div class="flex justify-between text-xs text-slate-400 mb-1.5">
+                    <span class="truncate max-w-xs" x-text="uploadLabel"></span>
+                    <span x-text="`${uploadProgress}%`"></span>
+                </div>
+                <div class="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+                    <div class="h-2 rounded-full transition-all duration-200 ease-out"
+                         :class="uploadProgress === 100 ? 'bg-green-500' : 'bg-sky-500'"
+                         :style="`width: ${uploadProgress}%`"></div>
+                </div>
+                <p class="text-xs text-slate-500 mt-1.5">
+                    <span x-text="uploadProgress < 95 ? 'Uploading to S3…' : uploadProgress < 100 ? 'Saving…' : 'Done!'"></span>
+                </p>
+            </div>
+
+            {# ── Archive toolbar — appears when files are checked ── #}
+            <div x-show="selected.length > 0" x-cloak x-transition
+                 class="bg-slate-800 border border-slate-600 rounded-xl px-5 py-3 mb-5 flex items-center gap-4 flex-wrap">
+                <span class="text-sm text-slate-300" x-text="`${selected.length} file${selected.length > 1 ? 's' : ''} selected`"></span>
+                <select x-model="archiveClass"
+                        class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500">
+                    <option value="GLACIER">Glacier Flexible Retrieval</option>
+                    <option value="DEEP_ARCHIVE">Deep Archive</option>
+                </select>
+                <button class="btn-primary text-sm" style="width:auto;padding:7px 16px;" :disabled="archiving"
+                        @click="
+                            archiving = true;
+                            const resp = await fetch('{% url 'drive_archive' %}', {
+                                method: 'POST',
+                                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
+                                body: JSON.stringify({ ids: selected, storage_class: archiveClass })
+                            });
+                            const data = await resp.json();
+                            data.updated?.forEach(({ id, html }) => {
+                                const el = document.getElementById('file-' + id);
+                                if (el) el.outerHTML = html;
+                            });
+                            selected = [];
+                            archiving = false;
+                        ">
+                    <span class="spinner" x-show="archiving" x-cloak></span>
+                    <span x-text="archiving ? 'Archiving…' : 'Archive'"></span>
+                </button>
+                <button class="text-slate-400 hover:text-slate-200 text-sm transition" @click="selected = []">Cancel</button>
+            </div>
+
+            {# ── Folder list ── #}
+            <div id="folder-list" class="space-y-2 mb-2">
+                {% for folder in subfolders %}
+                    {% include "drive/partials/folder_row.html" %}
+                {% endfor %}
+            </div>
+
+            {# ── File list ── #}
+            <div id="file-list" class="space-y-2">
+                {% for file in files %}
+                    {% include "drive/partials/file_row.html" %}
+                {% endfor %}
+            </div>
+
+            {# ── Empty state ── #}
+            {% if not subfolders and not files %}
+            <div id="empty-state" class="text-center bg-slate-800 border border-slate-700 rounded-xl py-20 mt-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto mb-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h3.586a1 1 0 01.707.293L10.414 6.5H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
+                </svg>
+                <p class="text-slate-400 text-lg">
+                    {% if current_folder %}{{ current_folder.name }} is empty{% else %}No files yet{% endif %}
+                </p>
+                <p class="text-slate-500 text-sm mt-1">Create a folder or upload a file using the buttons above</p>
+            </div>
+            {% endif %}
+
+        </div>{# /p-6 #}
+    </div>{# /main content #}
+
+</div>{# /flex wrapper #}
 {% endblock %}

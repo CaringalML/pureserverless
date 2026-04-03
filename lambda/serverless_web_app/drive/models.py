@@ -1,6 +1,23 @@
 from django.db import models
 
 
+class DriveFolder(models.Model):
+    owner_sub  = models.CharField(max_length=128, db_index=True)
+    name       = models.CharField(max_length=255)
+    parent     = models.ForeignKey(
+        'self', null=True, blank=True,
+        on_delete=models.CASCADE, related_name='subfolders',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['name']
+        unique_together = [('owner_sub', 'parent', 'name')]
+
+    def __str__(self):
+        return self.name
+
+
 class DriveFile(models.Model):
     STANDARD      = "STANDARD"
     STANDARD_IA   = "STANDARD_IA"
@@ -18,6 +35,10 @@ class DriveFile(models.Model):
 
     # Cognito user sub — ties file to owner without a users table
     owner_sub    = models.CharField(max_length=128, db_index=True)
+    folder       = models.ForeignKey(
+        DriveFolder, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='files',
+    )
     name         = models.CharField(max_length=255)
     s3_key       = models.CharField(max_length=512, unique=True)
     size         = models.BigIntegerField(default=0)

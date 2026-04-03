@@ -130,7 +130,7 @@
         </div>
     </nav>
 
-    <main class="flex-1 flex justify-center p-8">
+    <main class="{% block main_class %}flex-1 flex justify-center p-8{% endblock %}">
         {% block content %}{% endblock %}
     </main>
 

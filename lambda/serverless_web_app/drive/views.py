@@ -15,7 +15,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.views.decorators.http import require_POST
 
 from accounts.decorators import cognito_login_required
-from .models import DriveFile
+from .models import DriveFile, DriveFolder
 
 
 # ---------------------------------------------------------------------------
@@ -55,15 +55,105 @@ def _get_cloudfront_signed_url(s3_key, expires_seconds=300):
     return cf_signer.generate_presigned_url(url, date_less_than=expire_at)
 
 
+def _build_breadcrumbs(folder):
+    """Walk up the parent chain and return [root, ..., folder]."""
+    crumbs = []
+    node = folder
+    while node:
+        crumbs.insert(0, node)
+        node = node.parent
+    return crumbs
+
+
 # ---------------------------------------------------------------------------
 # Views
 # ---------------------------------------------------------------------------
 
 @cognito_login_required
-def drive_home(request):
+def drive_home(request, folder_pk=None):
     owner_sub = _get_owner_sub(request)
-    files = DriveFile.objects.filter(owner_sub=owner_sub)
-    return render(request, "drive/home.html", {"files": files})
+
+    current_folder = None
+    breadcrumbs = []
+    if folder_pk:
+        current_folder = get_object_or_404(DriveFolder, pk=folder_pk, owner_sub=owner_sub)
+        breadcrumbs = _build_breadcrumbs(current_folder)
+
+    files = DriveFile.objects.filter(owner_sub=owner_sub, folder=current_folder)
+    subfolders = DriveFolder.objects.filter(owner_sub=owner_sub, parent=current_folder)
+
+    # Sidebar: top-level folders with one level of children pre-fetched
+    sidebar_folders = DriveFolder.objects.filter(
+        owner_sub=owner_sub, parent=None
+    ).prefetch_related('subfolders')
+
+    return render(request, "drive/home.html", {
+        "files": files,
+        "subfolders": subfolders,
+        "current_folder": current_folder,
+        "breadcrumbs": breadcrumbs,
+        "sidebar_folders": sidebar_folders,
+    })
+
+
+@cognito_login_required
+@require_POST
+def create_folder(request):
+    """Create a new folder and return its rendered row HTML."""
+    try:
+        data = json.loads(request.body)
+        name = data.get("name", "").strip()
+        parent_pk = data.get("parent_pk")
+        owner_sub = _get_owner_sub(request)
+
+        if not name:
+            return JsonResponse({"error": "Folder name is required"}, status=400)
+
+        parent = None
+        if parent_pk:
+            parent = get_object_or_404(DriveFolder, pk=parent_pk, owner_sub=owner_sub)
+
+        folder = DriveFolder.objects.create(
+            owner_sub=owner_sub,
+            name=name,
+            parent=parent,
+        )
+
+        html = render(request, "drive/partials/folder_row.html", {"folder": folder}).content.decode()
+        return JsonResponse({"html": html, "id": folder.id})
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@cognito_login_required
+@require_POST
+def delete_folder(request, pk):
+    """Delete a folder (CASCADE removes all sub-folders; files are unlinked via SET_NULL then deleted)."""
+    owner_sub = _get_owner_sub(request)
+    folder = get_object_or_404(DriveFolder, pk=pk, owner_sub=owner_sub)
+
+    # Delete all files inside the folder (and subfolders) from S3
+    all_files = DriveFile.objects.filter(owner_sub=owner_sub, s3_key__startswith=f"{owner_sub}/")
+    # Narrow to files that belong to this folder subtree via the DB
+    def _collect_folder_ids(f, ids=None):
+        if ids is None:
+            ids = []
+        ids.append(f.pk)
+        for child in f.subfolders.all():
+            _collect_folder_ids(child, ids)
+        return ids
+
+    folder_ids = _collect_folder_ids(folder)
+    files_to_delete = DriveFile.objects.filter(owner_sub=owner_sub, folder_id__in=folder_ids)
+    s3 = _s3()
+    for f in files_to_delete:
+        try:
+            s3.delete_object(Bucket=settings.DRIVE_BUCKET_NAME, Key=f.s3_key)
+        except ClientError:
+            pass
+
+    folder.delete()  # CASCADE handles sub-folders in DB
+    return HttpResponse("")
 
 
 @cognito_login_required
@@ -75,9 +165,9 @@ def upload_url(request):
             return JsonResponse({"error": "DRIVE_BUCKET_NAME env var not set — has Terraform been applied?"}, status=500)
 
         data = json.loads(request.body)
-        filename    = data.get("filename", "unnamed")
+        filename     = data.get("filename", "unnamed")
         content_type = data.get("content_type", "application/octet-stream")
-        owner_sub   = _get_owner_sub(request)
+        owner_sub    = _get_owner_sub(request)
 
         s3_key = f"{owner_sub}/{uuid.uuid4()}/{filename}"
 
@@ -103,6 +193,11 @@ def confirm_upload(request):
     try:
         data = json.loads(request.body)
         owner_sub = _get_owner_sub(request)
+        folder_pk = data.get("folder_pk")
+
+        folder = None
+        if folder_pk:
+            folder = get_object_or_404(DriveFolder, pk=folder_pk, owner_sub=owner_sub)
 
         # Verify the object actually exists in S3
         head = _s3().head_object(
@@ -116,6 +211,7 @@ def confirm_upload(request):
             s3_key=data["s3_key"],
             size=head["ContentLength"],
             content_type=head.get("ContentType", "application/octet-stream"),
+            folder=folder,
         )
 
         html = render(request, "drive/partials/file_row.html", {"file": drive_file}).content.decode()
@@ -155,9 +251,9 @@ def archive_files(request):
     """Move selected files to Glacier Flexible or Deep Archive immediately."""
     try:
         data = json.loads(request.body)
-        file_ids      = data.get("ids", [])
-        target_class  = data.get("storage_class", "GLACIER")  # GLACIER or DEEP_ARCHIVE
-        owner_sub     = _get_owner_sub(request)
+        file_ids     = data.get("ids", [])
+        target_class = data.get("storage_class", "GLACIER")
+        owner_sub    = _get_owner_sub(request)
 
         if target_class not in ("GLACIER", "DEEP_ARCHIVE"):
             return JsonResponse({"error": "Invalid storage class"}, status=400)
@@ -166,7 +262,6 @@ def archive_files(request):
         updated_html = []
 
         for f in files:
-            # S3 copy-in-place to change storage class immediately
             _s3().copy_object(
                 Bucket=settings.DRIVE_BUCKET_NAME,
                 CopySource={"Bucket": settings.DRIVE_BUCKET_NAME, "Key": f.s3_key},
