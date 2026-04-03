@@ -62,10 +62,13 @@ def _get_cloudfront_signed_url(s3_key, expires_seconds=300):
 
 
 def _build_breadcrumbs(folder):
-    """Walk up the parent chain and return [root, ..., folder]."""
+    """Walk up the parent chain and return [root, ..., folder].
+    visited set guards against circular parent references in corrupt data."""
     crumbs = []
+    visited = set()
     node = folder
-    while node:
+    while node and node.pk not in visited:
+        visited.add(node.pk)
         crumbs.insert(0, node)
         node = node.parent
     return crumbs
@@ -138,15 +141,19 @@ def delete_folder(request, pk):
     owner_sub = _get_owner_sub(request)
     folder = get_object_or_404(DriveFolder, pk=pk, owner_sub=owner_sub)
 
-    # Delete all files inside the folder (and subfolders) from S3
-    all_files = DriveFile.objects.filter(owner_sub=owner_sub, s3_key__startswith=f"{owner_sub}/")
-    # Narrow to files that belong to this folder subtree via the DB
-    def _collect_folder_ids(f, ids=None):
-        if ids is None:
-            ids = []
-        ids.append(f.pk)
-        for child in f.subfolders.all():
-            _collect_folder_ids(child, ids)
+    # Collect all folder IDs in the subtree iteratively to avoid recursion stack
+    # overflow on deep nesting and to guard against circular parent references.
+    def _collect_folder_ids(root):
+        ids = []
+        queue = [root]
+        visited = set()
+        while queue:
+            f = queue.pop()
+            if f.pk in visited:
+                continue
+            visited.add(f.pk)
+            ids.append(f.pk)
+            queue.extend(f.subfolders.all())
         return ids
 
     folder_ids = _collect_folder_ids(folder)

@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -13,6 +14,10 @@ class DriveFolder(models.Model):
     class Meta:
         ordering = ['name']
         unique_together = [('owner_sub', 'parent', 'name')]
+
+    def clean(self):
+        if self.pk and self.parent_id == self.pk:
+            raise ValidationError("A folder cannot be its own parent.")
 
     def __str__(self):
         return self.name
