@@ -65,7 +65,8 @@ def signin(request):
             # Fetch user sub so drive views can scope files per owner
             user_resp = _cognito().get_user(AccessToken=tokens["AccessToken"])
             attrs = {a["Name"]: a["Value"] for a in user_resp["UserAttributes"]}
-            request.session["user_sub"] = attrs.get("sub", "")
+            request.session["user_sub"]   = attrs.get("sub", "")
+            request.session["user_email"] = attrs.get("email", "")
             return redirect("drive_home")
         except ClientError as e:
             form.add_error(None, e.response["Error"]["Message"])
