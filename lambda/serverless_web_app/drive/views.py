@@ -394,14 +394,18 @@ def archive_files(request):
             updated_html.append({"id": f.id, "html": html})
             archived_names.append(f.name)
 
-        # Send email notification
-        user_email = request.session.get("user_email", "")
-        if user_email and archived_names:
-            _send_archive_email(user_email, archived_names)
-
-        return JsonResponse({"updated": updated_html})
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
+
+    # Email send is outside the try/except so S3 errors and email errors are independent
+    user_email = request.session.get("user_email", "")
+    if user_email and archived_names:
+        try:
+            _send_archive_email(user_email, archived_names)
+        except Exception:
+            pass  # Email failure must not break the archive response
+
+    return JsonResponse({"updated": updated_html})
 
 
 @cognito_login_required
@@ -455,7 +459,10 @@ def restore_file(request, pk):
     file.save(update_fields=["restore_status", "restore_notify_email"])
 
     if user_email:
-        _send_restore_started_email(user_email, file.name)
+        try:
+            _send_restore_started_email(user_email, file.name)
+        except Exception:
+            pass  # Email failure must not break the restore response
 
     html = render(request, "drive/partials/file_row.html", {"file": file}).content.decode()
     return HttpResponse(html, content_type="text/html")
