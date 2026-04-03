@@ -87,15 +87,4 @@ CLOUDFRONT_PRIVATE_KEY_SSM_NAME = os.environ.get("CLOUDFRONT_PRIVATE_KEY_SSM_NAM
 # Resend email
 DRIVE_FROM_EMAIL = os.environ.get("DRIVE_FROM_EMAIL", "drive@nodepulsecaringal.xyz")
 
-def _get_resend_api_key():
-    """Fetch Resend API key from SSM (Lambda) or fall back to env var (local dev)."""
-    if key := os.environ.get("RESEND_API_KEY"):
-        return key
-    param_name = os.environ.get("SSM_RESEND_API_KEY_NAME")
-    if param_name:
-        import boto3
-        ssm = boto3.client("ssm", region_name=os.environ.get("AWS_REGION", "ap-southeast-2"))
-        return ssm.get_parameter(Name=param_name, WithDecryption=True)["Parameter"]["Value"]
-    return ""
-
-RESEND_API_KEY = _get_resend_api_key()
+SSM_RESEND_API_KEY_NAME = os.environ.get("SSM_RESEND_API_KEY_NAME", "")

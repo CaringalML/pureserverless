@@ -25,6 +25,17 @@ from .models import DriveFile, DriveFolder
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _get_resend_api_key():
+    """Fetch Resend API key fresh from SSM each time — avoids cold-start caching."""
+    if key := os.environ.get("RESEND_API_KEY"):
+        return key
+    param_name = settings.SSM_RESEND_API_KEY_NAME
+    if param_name:
+        ssm = boto3.client("ssm", region_name=settings.AWS_REGION)
+        return ssm.get_parameter(Name=param_name, WithDecryption=True)["Parameter"]["Value"]
+    return ""
+
+
 def _s3():
     return boto3.client(
         "s3",
@@ -385,7 +396,7 @@ def archive_files(request):
 
         # Send email notification
         user_email = request.session.get("user_email", "")
-        if user_email and archived_names and settings.RESEND_API_KEY:
+        if user_email and archived_names:
             _send_archive_email(user_email, archived_names)
 
         return JsonResponse({"updated": updated_html})
@@ -443,7 +454,7 @@ def restore_file(request, pk):
     file.restore_notify_email = user_email
     file.save(update_fields=["restore_status", "restore_notify_email"])
 
-    if user_email and settings.RESEND_API_KEY:
+    if user_email:
         _send_restore_started_email(user_email, file.name)
 
     html = render(request, "drive/partials/file_row.html", {"file": file}).content.decode()
@@ -451,7 +462,7 @@ def restore_file(request, pk):
 
 
 def _send_restore_started_email(to_email, file_name):
-    resend.api_key = settings.RESEND_API_KEY
+    resend.api_key = _get_resend_api_key()
     html_body = f"""
     <div style="font-family:sans-serif;max-width:560px;margin:0 auto;background:#0f172a;padding:32px;border-radius:12px;">
         <h2 style="color:#f1f5f9;margin-top:0;">StrawDrive — Restore Started</h2>
@@ -477,7 +488,7 @@ def _send_restore_started_email(to_email, file_name):
 
 def _send_archive_email(to_email, file_names):
     """Send a Resend email confirming files were moved to Glacier Deep Archive."""
-    resend.api_key = settings.RESEND_API_KEY
+    resend.api_key = _get_resend_api_key()
 
     file_list_html = "".join(
         f'<li style="padding:4px 0;color:#cbd5e1;">{name}</li>'
