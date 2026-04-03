@@ -106,18 +106,6 @@ resource "aws_s3_bucket_policy" "drive" {
           }
         }
       },
-      {
-        # Hard block: prevents lifecycle rules from ever deleting objects or versions.
-        # Files are only deleted by explicit user action through the application.
-        Sid       = "DenyLifecycleDelete"
-        Effect    = "Deny"
-        Principal = { Service = "lifecycle.amazonaws.com" }
-        Action    = [
-          "s3:DeleteObject",
-          "s3:DeleteObjectVersion",
-        ]
-        Resource  = "${aws_s3_bucket.drive.arn}/*"
-      }
     ]
   })
 
