@@ -15,6 +15,18 @@ resource "aws_s3_bucket_public_access_block" "drive" {
   restrict_public_buckets = true
 }
 
+resource "aws_s3_bucket_cors_configuration" "drive" {
+  bucket = aws_s3_bucket.drive.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["GET", "PUT", "POST", "DELETE", "HEAD"]
+    allowed_origins = ["*"]
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3000
+  }
+}
+
 resource "aws_s3_bucket_versioning" "drive" {
   bucket = aws_s3_bucket.drive.id
   versioning_configuration {
