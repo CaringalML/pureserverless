@@ -34,10 +34,14 @@ resource "aws_s3_bucket_versioning" "drive" {
   }
 }
 
-# Automatic tiering: Standard → Standard-IA → Glacier Instant Retrieval
+# Lifecycle: transitions only — deletion by lifecycle cycle is explicitly prohibited.
+# NEVER add an expiration{} or noncurrent_version_expiration{} block here.
+# Files are only deleted by explicit user action through the app (drive_delete view).
 resource "aws_s3_bucket_lifecycle_configuration" "drive" {
   bucket = aws_s3_bucket.drive.id
 
+  # Transitions current versions through storage tiers to reduce cost.
+  # No expiration — objects are never automatically deleted.
   rule {
     id     = "auto-tiering"
     status = "Enabled"
@@ -52,6 +56,19 @@ resource "aws_s3_bucket_lifecycle_configuration" "drive" {
     transition {
       days          = 90
       storage_class = "GLACIER_IR"
+    }
+  }
+
+  # Expire incomplete multipart uploads after 7 days to avoid orphaned storage charges.
+  # This only removes partial uploads that were never completed — not actual files.
+  rule {
+    id     = "abort-incomplete-multipart"
+    status = "Enabled"
+
+    filter {}
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
     }
   }
 }
@@ -88,6 +105,18 @@ resource "aws_s3_bucket_policy" "drive" {
             "AWS:SourceArn" = aws_cloudfront_distribution.drive.arn
           }
         }
+      },
+      {
+        # Hard block: prevents lifecycle rules from ever deleting objects or versions.
+        # Files are only deleted by explicit user action through the application.
+        Sid       = "DenyLifecycleDelete"
+        Effect    = "Deny"
+        Principal = { Service = "lifecycle.amazonaws.com" }
+        Action    = [
+          "s3:DeleteObject",
+          "s3:DeleteObjectVersion",
+        ]
+        Resource  = "${aws_s3_bucket.drive.arn}/*"
       }
     ]
   })
