@@ -21,3 +21,9 @@ variable "database_url" {
   type        = string
   sensitive   = true
 }
+
+variable "custom_domain" {
+  description = "Custom domain for the app (e.g. drive.nodepulsecaringal.xyz)"
+  type        = string
+  default     = "drive.nodepulsecaringal.xyz"
+}

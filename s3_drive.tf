@@ -21,7 +21,7 @@ resource "aws_s3_bucket_cors_configuration" "drive" {
   cors_rule {
     allowed_headers = ["*"]
     allowed_methods = ["GET", "PUT", "POST", "DELETE", "HEAD"]
-    allowed_origins = ["*"]
+    allowed_origins = ["https://${var.custom_domain}"]
     expose_headers  = ["ETag"]
     max_age_seconds = 3000
   }

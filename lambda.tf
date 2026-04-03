@@ -29,6 +29,8 @@ resource "aws_lambda_function" "serverless_web_app" {
       CLOUDFRONT_DOMAIN               = aws_cloudfront_distribution.drive.domain_name
       CLOUDFRONT_KEY_PAIR_ID          = aws_cloudfront_public_key.drive.id
       CLOUDFRONT_PRIVATE_KEY_SSM_NAME = aws_ssm_parameter.cloudfront_private_key.name
+      ALLOWED_HOSTS                   = var.custom_domain
+      CSRF_TRUSTED_ORIGINS            = "https://${var.custom_domain}"
     }
   }
 

@@ -32,3 +32,18 @@ output "cloudfront_domain" {
   description = "CloudFront domain for serving StrawDrive files"
   value       = aws_cloudfront_distribution.drive.domain_name
 }
+
+output "acm_validation_cname_name" {
+  description = "STEP 1 — Add this CNAME record NAME in Cloudflare (proxy OFF) to validate ACM cert"
+  value       = tolist(aws_acm_certificate.main.domain_validation_options)[0].resource_record_name
+}
+
+output "acm_validation_cname_value" {
+  description = "STEP 1 — Add this CNAME record VALUE in Cloudflare (proxy OFF) to validate ACM cert"
+  value       = tolist(aws_acm_certificate.main.domain_validation_options)[0].resource_record_value
+}
+
+output "cloudflare_cname_target" {
+  description = "STEP 2 — After cert is validated, point drive CNAME to this in Cloudflare (proxy ON)"
+  value       = aws_apigatewayv2_domain_name.main.domain_name_configuration[0].target_domain_name
+}

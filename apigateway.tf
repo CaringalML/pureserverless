@@ -3,9 +3,9 @@ resource "aws_apigatewayv2_api" "serverless_web_app" {
   protocol_type = "HTTP"
 
   cors_configuration {
-    allow_origins = ["*"]
-    allow_methods = ["GET", "POST", "OPTIONS"]
-    allow_headers = ["Content-Type"]
+    allow_origins = ["https://${var.custom_domain}"]
+    allow_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    allow_headers = ["Content-Type", "X-CSRFToken"]
   }
 
   tags = {

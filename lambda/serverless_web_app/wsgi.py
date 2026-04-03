@@ -6,4 +6,4 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.prod")
 
 application = get_asgi_application()
 
-handler = Mangum(application, lifespan="off", api_gateway_base_path="/dev")
+handler = Mangum(application, lifespan="off")
