@@ -437,6 +437,88 @@ def archive_view(request):
 
 @cognito_login_required
 @require_POST
+def bulk_restore(request):
+    """Initiate Glacier restore for multiple selected archived files."""
+    data      = json.loads(request.body)
+    file_ids  = data.get("ids", [])
+    owner_sub = _get_owner_sub(request)
+    user_email = request.session.get("user_email", "")
+
+    files = DriveFile.objects.filter(
+        id__in=file_ids,
+        owner_sub=owner_sub,
+        storage_class__in=(DriveFile.GLACIER, DriveFile.DEEP_ARCHIVE),
+        restore_status="",
+        deleted_at__isnull=True,
+    )
+
+    updated_html = []
+    restored_names = []
+
+    for f in files:
+        try:
+            _s3().restore_object(
+                Bucket=settings.DRIVE_BUCKET_NAME,
+                Key=f.s3_key,
+                RestoreRequest={"Days": 7, "GlacierJobParameters": {"Tier": "Standard"}},
+            )
+        except ClientError as e:
+            code = e.response["Error"]["Code"]
+            logger.error("bulk restore_object failed file=%s code=%s", f.pk, code)
+            if code != "RestoreAlreadyInProgress":
+                continue
+
+        f.restore_status       = DriveFile.RESTORE_PENDING
+        f.restore_notify_email = user_email
+        f.save(update_fields=["restore_status", "restore_notify_email"])
+        html = render(request, "drive/partials/file_row.html", {"file": f}).content.decode()
+        updated_html.append({"id": f.id, "html": html})
+        restored_names.append(f.name)
+
+    if user_email and restored_names:
+        try:
+            _send_bulk_restore_email(user_email, restored_names)
+        except Exception as email_err:
+            logger.error("bulk restore email failed: %s", email_err, exc_info=True)
+
+    return JsonResponse({"updated": updated_html})
+
+
+def _send_bulk_restore_email(to_email, file_names):
+    resend.api_key = _get_resend_api_key()
+    count = len(file_names)
+    noun  = "file" if count == 1 else "files"
+    file_list_html = "".join(
+        f'<li style="padding:4px 0;color:#cbd5e1;">{name}</li>'
+        for name in file_names
+    )
+    html_body = f"""
+    <div style="font-family:sans-serif;max-width:560px;margin:0 auto;background:#0f172a;padding:32px;border-radius:12px;">
+        <h2 style="color:#f1f5f9;margin-top:0;">StrawDrive — Restore Started</h2>
+        <p style="color:#94a3b8;">
+            {count} {noun} are being restored from Glacier Deep Archive:
+        </p>
+        <ul style="background:#1e293b;border-radius:8px;padding:16px 16px 16px 32px;margin:16px 0;">
+            {file_list_html}
+        </ul>
+        <p style="color:#94a3b8;">
+            Retrieval typically takes <strong style="color:#f1f5f9;">12–48 hours</strong>.
+            We'll send you another email as soon as your {noun} {"is" if count == 1 else "are"} ready to download.
+        </p>
+        <hr style="border:none;border-top:1px solid #1e293b;margin:24px 0;">
+        <p style="color:#475569;font-size:12px;margin:0;">StrawDrive &nbsp;·&nbsp; nodepulsecaringal.xyz</p>
+    </div>
+    """
+    resend.Emails.send({
+        "from": settings.DRIVE_FROM_EMAIL,
+        "to": [to_email],
+        "subject": f"StrawDrive: Restoring {count} {noun} — we'll notify you when ready",
+        "html": html_body,
+    })
+
+
+@cognito_login_required
+@require_POST
 def restore_file(request, pk):
     """Initiate a Glacier restore and notify the user when it's ready."""
     file = get_object_or_404(DriveFile, pk=pk, owner_sub=_get_owner_sub(request))
