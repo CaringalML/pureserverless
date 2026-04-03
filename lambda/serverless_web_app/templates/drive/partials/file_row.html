@@ -55,17 +55,28 @@
                 Restoring&hellip;
             </span>
             {% else %}
-            <form method="post" action="{% url 'drive_restore' file.pk %}"
-                  hx-post="{% url 'drive_restore' file.pk %}"
-                  hx-target="#file-{{ file.pk }}"
-                  hx-swap="outerHTML"
-                  hx-confirm="Request restore for '{{ file.name }}'? Retrieval from Deep Archive takes 12–48 hours. You'll receive an email when it's ready.">
-                {% csrf_token %}
-                <button type="submit"
-                        class="text-xs text-purple-400 font-medium px-2 py-1 bg-purple-900/30 border border-purple-800 rounded-lg hover:bg-purple-900/60 transition-colors duration-150">
-                    Archived &mdash; Restore
-                </button>
-            </form>
+            <div x-data="{ restoring: false }">
+                <form method="post" action="{% url 'drive_restore' file.pk %}"
+                      hx-post="{% url 'drive_restore' file.pk %}"
+                      hx-target="#file-{{ file.pk }}"
+                      hx-swap="outerHTML"
+                      hx-confirm="Request restore for '{{ file.name }}'? Retrieval from Deep Archive takes 12–48 hours. You'll receive an email when it's ready."
+                      @htmx:confirm="restoring = true">
+                    {% csrf_token %}
+                    <button type="submit"
+                            :disabled="restoring"
+                            class="text-xs font-medium px-2 py-1 rounded-lg border flex items-center gap-1.5 transition-colors duration-150"
+                            :class="restoring
+                                ? 'text-sky-400 bg-sky-900/30 border-sky-800 cursor-not-allowed'
+                                : 'text-purple-400 bg-purple-900/30 border-purple-800 hover:bg-purple-900/60'">
+                        <svg x-show="restoring" class="animate-spin w-3 h-3 shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                        </svg>
+                        <span x-text="restoring ? 'Restoring\u2026' : 'Archived \u2014 Restore'"></span>
+                    </button>
+                </form>
+            </div>
             {% endif %}
         {% else %}
         <button @click="openPreview({{ file.pk }})"
