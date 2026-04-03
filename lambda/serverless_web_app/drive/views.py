@@ -1,6 +1,7 @@
 import datetime
 import json
 import uuid
+from urllib.parse import quote
 
 import boto3
 from botocore.config import Config
@@ -50,7 +51,10 @@ def _get_cloudfront_signed_url(s3_key, expires_seconds=300):
         return private_key.sign(message, padding.PKCS1v15(), hashes.SHA1())
 
     cf_signer = CloudFrontSigner(settings.CLOUDFRONT_KEY_PAIR_ID, rsa_signer)
-    url = f"https://{settings.CLOUDFRONT_DOMAIN}/{s3_key}"
+    # URL-encode the path (spaces → %20 etc.) so the signature matches what
+    # the browser actually requests. safe='/' preserves path separators.
+    encoded_key = quote(s3_key, safe="/")
+    url = f"https://{settings.CLOUDFRONT_DOMAIN}/{encoded_key}"
     expire_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=expires_seconds)
     return cf_signer.generate_presigned_url(url, date_less_than=expire_at)
 
