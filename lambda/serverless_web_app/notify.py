@@ -22,7 +22,12 @@ def handler(event, context):
             continue
 
         s3_key = unquote_plus(record["s3"]["object"]["key"])
-        _handle_restore_completed(s3_key)
+        try:
+            _handle_restore_completed(s3_key)
+        except Exception as e:
+            # Log but do not re-raise — prevents Lambda from retrying and
+            # sending duplicate "ready" emails on transient failures.
+            print(f"[ERROR] notify handler failed for key={s3_key}: {e}")
 
 
 def _handle_restore_completed(s3_key):
@@ -51,14 +56,18 @@ def _handle_restore_completed(s3_key):
         with conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    "SELECT id, name, restore_notify_email FROM drive_drivefile WHERE s3_key = %s",
+                    "SELECT id, name, restore_notify_email, restore_status FROM drive_drivefile WHERE s3_key = %s",
                     (s3_key,),
                 )
                 row = cur.fetchone()
                 if not row:
                     return
 
-                file_id, file_name, notify_email = row
+                file_id, file_name, notify_email, restore_status = row
+
+                # Already processed on a previous attempt — skip to avoid duplicate email
+                if restore_status == "ready":
+                    return
 
                 cur.execute(
                     "UPDATE drive_drivefile SET restore_status = 'ready' WHERE id = %s",
