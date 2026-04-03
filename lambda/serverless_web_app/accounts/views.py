@@ -62,6 +62,10 @@ def signin(request):
             tokens = resp["AuthenticationResult"]
             request.session["access_token"]  = tokens["AccessToken"]
             request.session["refresh_token"] = tokens["RefreshToken"]
+            # Fetch user sub so drive views can scope files per owner
+            user_resp = _cognito().get_user(AccessToken=tokens["AccessToken"])
+            attrs = {a["Name"]: a["Value"] for a in user_resp["UserAttributes"]}
+            request.session["user_sub"] = attrs.get("sub", "")
             return redirect("dashboard")
         except ClientError as e:
             form.add_error(None, e.response["Error"]["Message"])

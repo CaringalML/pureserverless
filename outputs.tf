@@ -22,3 +22,13 @@ output "cognito_client_id" {
   description = "Cognito User Pool App Client ID"
   value       = aws_cognito_user_pool_client.main.id
 }
+
+output "drive_bucket_name" {
+  description = "S3 bucket name for StrawDrive file storage"
+  value       = aws_s3_bucket.drive.bucket
+}
+
+output "cloudfront_domain" {
+  description = "CloudFront domain for serving StrawDrive files"
+  value       = aws_cloudfront_distribution.drive.domain_name
+}

@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}StrawDrive{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-5xl"
+     x-data="{
+        uploading: false,
+        uploadProgress: 0,
+        selected: [],
+        archiveClass: 'GLACIER',
+        archiving: false,
+        toggleSelect(id) {
+            if (this.selected.includes(id)) {
+                this.selected = this.selected.filter(x => x !== id);
+            } else {
+                this.selected.push(id);
+            }
+        },
+        isSelected(id) { return this.selected.includes(id); }
+     }">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-3xl font-bold">StrawDrive</h1>
+            <p class="text-slate-400 text-sm mt-0.5">Your personal cloud storage</p>
+        </div>
+        <label class="btn-primary cursor-pointer" style="width:auto;padding:10px 20px;" :class="{ 'opacity-60 cursor-not-allowed': uploading }">
+            <svg x-show="!uploading" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 12V4m0 0L8 8m4-4l4 4"/></svg>
+            <span class="spinner" x-show="uploading" x-cloak></span>
+            <span x-text="uploading ? 'Uploading…' : 'Upload file'"></span>
+            <input type="file" class="hidden" :disabled="uploading" @change="
+                uploading = true;
+                uploadProgress = 0;
+                const file = $event.target.files[0];
+                if (!file) { uploading = false; return; }
+
+                // Step 1: get presigned POST URL from server
+                const resp = await fetch('{% url 'drive_upload_url' %}', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || ''},
+                    body: JSON.stringify({ filename: file.name, content_type: file.type || 'application/octet-stream' })
+                });
+                const { url, fields, s3_key, error } = await resp.json();
+                if (error) { alert(error); uploading = false; return; }
+
+                // Step 2: upload directly to S3 via presigned POST
+                const form = new FormData();
+                Object.entries(fields).forEach(([k,v]) => form.append(k, v));
+                form.append('file', file);
+                await fetch(url, { method: 'POST', body: form });
+
+                // Step 3: confirm with server to save metadata
+                const confirm = await fetch('{% url 'drive_confirm' %}', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || ''},
+                    body: JSON.stringify({ filename: file.name, s3_key })
+                });
+                const result = await confirm.json();
+                if (result.html) {
+                    const list = document.getElementById('file-list');
+                    list.insertAdjacentHTML('afterbegin', result.html);
+                    document.getElementById('empty-state')?.remove();
+                }
+                uploading = false;
+                $event.target.value = '';
+            ">
+        </label>
+    </div>
+
+    <!-- Archive toolbar — shown when files are selected -->
+    <div x-show="selected.length > 0" x-cloak x-transition
+         class="bg-slate-800 border border-slate-600 rounded-xl px-5 py-3 mb-4 flex items-center gap-4 flex-wrap">
+        <span class="text-sm text-slate-300" x-text="`${selected.length} file${selected.length > 1 ? 's' : ''} selected`"></span>
+        <select x-model="archiveClass"
+                class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500">
+            <option value="GLACIER">Glacier Flexible Retrieval</option>
+            <option value="DEEP_ARCHIVE">Deep Archive</option>
+        </select>
+        <button class="btn-primary text-sm" style="width:auto;padding:7px 16px;" :disabled="archiving"
+                @click="
+                    archiving = true;
+                    const resp = await fetch('{% url 'drive_archive' %}', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json', 'X-CSRFToken': document.cookie.match(/csrftoken=([^;]+)/)?.[1] || ''},
+                        body: JSON.stringify({ ids: selected, storage_class: archiveClass })
+                    });
+                    const data = await resp.json();
+                    data.updated?.forEach(({ id, html }) => {
+                        const el = document.getElementById('file-' + id);
+                        if (el) el.outerHTML = html;
+                    });
+                    selected = [];
+                    archiving = false;
+                ">
+            <span class="spinner" x-show="archiving" x-cloak></span>
+            <span x-text="archiving ? 'Archiving…' : 'Archive'"></span>
+        </button>
+        <button class="text-slate-400 hover:text-slate-200 text-sm transition" @click="selected = []">Cancel</button>
+    </div>
+
+    <!-- File list -->
+    <div id="file-list" class="space-y-2">
+        {% for file in files %}
+            {% include "drive/partials/file_row.html" %}
+        {% endfor %}
+    </div>
+
+    {% if not files %}
+    <div id="empty-state" class="text-center bg-slate-800 border border-slate-700 rounded-xl py-20">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto mb-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h3.586a1 1 0 01.707.293L10.414 6.5H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
+        </svg>
+        <p class="text-slate-400 text-lg">No files yet</p>
+        <p class="text-slate-500 text-sm mt-1">Upload your first file using the button above</p>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

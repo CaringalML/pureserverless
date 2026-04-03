@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.sessions",
     "accounts",
+    "drive",
 ]
 
 MIDDLEWARE = [
@@ -76,3 +77,9 @@ AWS_REGION = os.environ.get("AWS_REGION", "ap-southeast-2")
 # Cognito
 COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "")
 COGNITO_CLIENT_ID    = os.environ.get("COGNITO_CLIENT_ID", "")
+
+# StrawDrive
+DRIVE_BUCKET_NAME               = os.environ.get("DRIVE_BUCKET_NAME", "")
+CLOUDFRONT_DOMAIN               = os.environ.get("CLOUDFRONT_DOMAIN", "")
+CLOUDFRONT_KEY_PAIR_ID          = os.environ.get("CLOUDFRONT_KEY_PAIR_ID", "")
+CLOUDFRONT_PRIVATE_KEY_SSM_NAME = os.environ.get("CLOUDFRONT_PRIVATE_KEY_SSM_NAME", "")

@@ -44,6 +44,50 @@ resource "aws_iam_role_policy" "lambda_ssm" {
   })
 }
 
+# Allow Lambda to read/write files in the drive S3 bucket
+resource "aws_iam_role_policy" "lambda_s3_drive" {
+  name = "${var.lambda_function_name}-${var.environment}-s3-drive-policy"
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:DeleteObject",
+          "s3:CopyObject",
+          "s3:HeadObject",
+          "s3:ListBucket",
+        ]
+        Resource = [
+          aws_s3_bucket.drive.arn,
+          "${aws_s3_bucket.drive.arn}/*",
+        ]
+      }
+    ]
+  })
+}
+
+# Allow Lambda to read the CloudFront signing private key from SSM
+resource "aws_iam_role_policy" "lambda_ssm_cloudfront_key" {
+  name = "${var.lambda_function_name}-${var.environment}-ssm-cf-key-policy"
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter"]
+        Resource = aws_ssm_parameter.cloudfront_private_key.arn
+      }
+    ]
+  })
+}
+
 # Allow Lambda to call Cognito on behalf of the application
 resource "aws_iam_role_policy" "lambda_cognito" {
   name = "${var.lambda_function_name}-${var.environment}-cognito-policy"
