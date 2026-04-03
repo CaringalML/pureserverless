@@ -12,7 +12,7 @@ X_FRAME_OPTIONS = "DENY"
 # behind the API Gateway stage prefix.
 # FORCE_SCRIPT_NAME removed — custom domain has no stage prefix in the URL.
 
-CSRF_TRUSTED_ORIGINS = os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",")
+CSRF_TRUSTED_ORIGINS = [o for o in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",") if o]
 
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_HTTPONLY = True
