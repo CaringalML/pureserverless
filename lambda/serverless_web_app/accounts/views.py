@@ -47,7 +47,7 @@ def verify(request):
 
 def signin(request):
     if request.session.get("access_token"):
-        return redirect("dashboard")
+        return redirect("drive_home")
     form = SignInForm(request.POST or None)
     if form.is_valid():
         try:
@@ -66,7 +66,7 @@ def signin(request):
             user_resp = _cognito().get_user(AccessToken=tokens["AccessToken"])
             attrs = {a["Name"]: a["Value"] for a in user_resp["UserAttributes"]}
             request.session["user_sub"] = attrs.get("sub", "")
-            return redirect("dashboard")
+            return redirect("drive_home")
         except ClientError as e:
             form.add_error(None, e.response["Error"]["Message"])
     return render(request, "accounts/signin.html", {"form": form})
