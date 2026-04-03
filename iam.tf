@@ -88,6 +88,23 @@ resource "aws_iam_role_policy" "lambda_ssm_cloudfront_key" {
   })
 }
 
+# Allow Lambda to read the Resend API key from SSM
+resource "aws_iam_role_policy" "lambda_ssm_resend_key" {
+  name = "${var.lambda_function_name}-${var.environment}-ssm-resend-key-policy"
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter"]
+        Resource = aws_ssm_parameter.resend_api_key.arn
+      }
+    ]
+  })
+}
+
 # Allow Lambda to call Cognito on behalf of the application
 resource "aws_iam_role_policy" "lambda_cognito" {
   name = "${var.lambda_function_name}-${var.environment}-cognito-policy"
