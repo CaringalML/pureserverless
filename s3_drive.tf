@@ -56,6 +56,18 @@ resource "aws_s3_bucket_lifecycle_configuration" "drive" {
   }
 }
 
+# Notify Lambda when a Glacier restore completes
+resource "aws_s3_bucket_notification" "drive_restore_completed" {
+  bucket = aws_s3_bucket.drive.id
+
+  lambda_function {
+    lambda_function_arn = aws_lambda_function.notify.arn
+    events              = ["s3:ObjectRestore:Completed"]
+  }
+
+  depends_on = [aws_lambda_permission.s3_invoke_notify]
+}
+
 # Only CloudFront (via OAC) can read objects — no direct S3 access
 resource "aws_s3_bucket_policy" "drive" {
   bucket = aws_s3_bucket.drive.id

@@ -40,3 +40,44 @@ resource "aws_lambda_function" "serverless_web_app" {
     Environment = var.environment
   }
 }
+
+# ── Glacier restore-completed notification Lambda ──────────────────────────
+resource "aws_cloudwatch_log_group" "notify_lambda" {
+  name              = "/aws/lambda/${var.lambda_function_name}-notify-${var.environment}"
+  retention_in_days = 7
+}
+
+resource "aws_lambda_function" "notify" {
+  filename         = data.archive_file.lambda_zip.output_path
+  function_name    = "${var.lambda_function_name}-notify-${var.environment}"
+  role             = aws_iam_role.lambda_role.arn
+  handler          = "notify.handler"
+  runtime          = "python3.12"
+  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
+  timeout          = 60
+
+  depends_on = [aws_cloudwatch_log_group.notify_lambda]
+
+  environment {
+    variables = {
+      AWS_REGION_NAME         = var.aws_region
+      SSM_DATABASE_URL_NAME   = aws_ssm_parameter.database_url.name
+      SSM_RESEND_API_KEY_NAME = aws_ssm_parameter.resend_api_key.name
+      DRIVE_FROM_EMAIL        = "drive@nodepulsecaringal.xyz"
+      DRIVE_URL               = "https://${var.custom_domain}/drive/"
+    }
+  }
+
+  tags = {
+    Environment = var.environment
+  }
+}
+
+# Allow S3 to invoke the notify Lambda
+resource "aws_lambda_permission" "s3_invoke_notify" {
+  statement_id  = "AllowS3InvokeNotify"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.notify.function_name
+  principal     = "s3.amazonaws.com"
+  source_arn    = aws_s3_bucket.drive.arn
+}

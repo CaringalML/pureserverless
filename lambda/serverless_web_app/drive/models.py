@@ -50,6 +50,16 @@ class DriveFile(models.Model):
     )
     uploaded_at  = models.DateTimeField(auto_now_add=True)
 
+    RESTORE_PENDING = "pending"
+    RESTORE_READY   = "ready"
+    RESTORE_STATUS_CHOICES = [
+        (RESTORE_PENDING, "Restoring"),
+        (RESTORE_READY,   "Ready"),
+    ]
+    restore_status       = models.CharField(max_length=10, blank=True, default="",
+                                            choices=RESTORE_STATUS_CHOICES)
+    restore_notify_email = models.EmailField(blank=True, default="")
+
     class Meta:
         ordering = ["-uploaded_at"]
 

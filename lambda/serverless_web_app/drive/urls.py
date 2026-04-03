@@ -13,4 +13,5 @@ urlpatterns = [
     path("view/<int:pk>/",               views.view_file,      name="drive_view"),
     path("delete/<int:pk>/",             views.delete_file,    name="drive_delete"),
     path("archive/",                      views.archive_files,  name="drive_archive"),
+    path("restore/<int:pk>/",             views.restore_file,   name="drive_restore"),
 ]
