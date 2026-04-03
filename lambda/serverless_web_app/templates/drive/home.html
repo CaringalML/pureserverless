@@ -43,8 +43,12 @@
                         content_type: file.type || 'application/octet-stream',
                     }),
                 });
+                if (!resp.ok) {
+                    throw new Error(`Failed to get upload URL (HTTP ${resp.status})`);
+                }
                 const { url, fields, s3_key, error } = await resp.json();
-                if (error) { alert('Upload error: ' + error); return; }
+                if (error) { throw new Error('Server error: ' + error); }
+                console.log('[StrawDrive] Uploading to:', url, 'fields:', fields, 's3_key:', s3_key);
 
                 // Step 2: upload directly to S3 with XHR so we get progress events
                 await new Promise((resolve, reject) => {
@@ -61,14 +65,18 @@
                         }
                     });
                     xhr.addEventListener('load', () => {
+                        console.log('[StrawDrive] S3 response status:', xhr.status, xhr.responseText);
                         if (xhr.status >= 200 && xhr.status < 300) {
                             this.uploadProgress = 95;
                             resolve();
                         } else {
-                            reject(new Error('S3 upload failed: ' + xhr.status));
+                            reject(new Error(`S3 rejected upload (HTTP ${xhr.status}): ${xhr.responseText}`));
                         }
                     });
-                    xhr.addEventListener('error', () => reject(new Error('Network error during upload')));
+                    xhr.addEventListener('error', () => {
+                        console.error('[StrawDrive] XHR network error — likely CORS. Check S3 bucket CORS config.');
+                        reject(new Error('Network error uploading to S3 — CORS may not be applied yet. Check browser console.'));
+                    });
                     xhr.send(form);
                 });
 

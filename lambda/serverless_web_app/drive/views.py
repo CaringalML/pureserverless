@@ -65,6 +65,9 @@ def drive_home(request):
 def upload_url(request):
     """Return a presigned S3 POST URL — the browser uploads directly to S3."""
     try:
+        if not settings.DRIVE_BUCKET_NAME:
+            return JsonResponse({"error": "DRIVE_BUCKET_NAME env var not set — has Terraform been applied?"}, status=500)
+
         data = json.loads(request.body)
         filename    = data.get("filename", "unnamed")
         content_type = data.get("content_type", "application/octet-stream")
