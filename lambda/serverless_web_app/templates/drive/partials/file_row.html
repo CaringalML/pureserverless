@@ -3,15 +3,14 @@
      :class="isSelected({{ file.pk }}) ? 'border-sky-500' : 'border-slate-700'">
 
     <!-- Checkbox -->
+    {% if file.restore_status == 'pending' or file.restore_status == 'ready' %}
+    <div class="w-4 h-4 shrink-0"></div>
+    {% else %}
     <input type="checkbox"
            class="w-4 h-4 accent-sky-500 cursor-pointer shrink-0"
            :checked="isSelected({{ file.pk }})"
-           @change="toggleSelect({{ file.pk }})"
-           {% if file.is_archived and file.restore_status != 'pending' and file.restore_status != 'ready' %}
-           {# selectable in archive view for bulk restore; disabled only when restoring/ready #}
-           {% elif file.restore_status == 'pending' or file.restore_status == 'ready' %}
-           disabled title="Already restoring or restored"
-           {% endif %}>
+           @change="toggleSelect({{ file.pk }})">
+    {% endif %}
 
     <!-- File icon -->
     <div class="shrink-0">
