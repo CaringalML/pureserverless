@@ -118,7 +118,7 @@ def drive_home(request, folder_pk=None):
     # Sidebar: top-level folders with one level of children pre-fetched
     sidebar_folders = DriveFolder.objects.filter(
         owner_sub=owner_sub, parent=None
-    ).prefetch_related('subfolders')
+    ).prefetch_related('subfolders', 'subfolders__subfolders', 'subfolders__subfolders__subfolders')
 
     return render(request, "drive/home.html", {
         "files": files,
@@ -359,7 +359,7 @@ def recycle_bin(request):
 
     sidebar_folders = DriveFolder.objects.filter(
         owner_sub=owner_sub, parent=None
-    ).prefetch_related('subfolders')
+    ).prefetch_related('subfolders', 'subfolders__subfolders', 'subfolders__subfolders__subfolders')
 
     return render(request, "drive/home.html", {
         "files": bin_files,
@@ -423,7 +423,7 @@ def archive_view(request):
     )
     sidebar_folders = DriveFolder.objects.filter(
         owner_sub=owner_sub, parent=None
-    ).prefetch_related('subfolders')
+    ).prefetch_related('subfolders', 'subfolders__subfolders', 'subfolders__subfolders__subfolders')
 
     return render(request, "drive/home.html", {
         "files": archived_files,

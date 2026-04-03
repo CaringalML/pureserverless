@@ -207,28 +207,11 @@
                 Recycle Bin
             </a>
 
-            {# Folder tree #}
+            {# Folder tree — VSCode-style collapsible #}
             {% for sf in sidebar_folders %}
-            <div>
-                <a href="{% url 'drive_folder' sf.pk %}"
-                   class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors duration-100
-                          {% if current_folder.pk == sf.pk %}bg-slate-600 text-white{% else %}text-slate-400 hover:bg-slate-700 hover:text-white{% endif %}">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-yellow-400" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M10.414 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-6.586L10.414 3z"/>
-                    </svg>
-                    <span class="truncate">{{ sf.name }}</span>
-                </a>
-                {% for child in sf.subfolders.all %}
-                <a href="{% url 'drive_folder' child.pk %}"
-                   class="flex items-center gap-3 pl-8 pr-3 py-1.5 rounded-lg text-xs transition-colors duration-100
-                          {% if current_folder.pk == child.pk %}bg-slate-600 text-white{% else %}text-slate-500 hover:bg-slate-700 hover:text-white{% endif %}">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0 text-yellow-300" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M10.414 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-6.586L10.414 3z"/>
-                    </svg>
-                    <span class="truncate">{{ child.name }}</span>
-                </a>
-                {% endfor %}
-            </div>
+                {% with folder=sf depth=0 %}
+                    {% include "drive/partials/sidebar_folder.html" %}
+                {% endwith %}
             {% endfor %}
         </div>
 
