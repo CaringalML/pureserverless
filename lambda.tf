@@ -32,7 +32,7 @@ resource "aws_lambda_function" "serverless_web_app" {
       ALLOWED_HOSTS                   = var.custom_domain
       CSRF_TRUSTED_ORIGINS            = "https://${var.custom_domain}"
       SSM_RESEND_API_KEY_NAME         = aws_ssm_parameter.resend_api_key.name
-      DRIVE_FROM_EMAIL                = "noreply@nodepulsecaringal.xyz"
+      DRIVE_FROM_EMAIL                = "drive@nodepulsecaringal.xyz"
     }
   }
 

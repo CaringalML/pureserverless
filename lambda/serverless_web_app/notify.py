@@ -71,7 +71,7 @@ def _handle_restore_completed(s3_key):
         return
 
     resend.api_key = resend_key
-    from_email     = os.environ.get("DRIVE_FROM_EMAIL", "noreply@nodepulsecaringal.xyz")
+    from_email     = os.environ.get("DRIVE_FROM_EMAIL", "drive@nodepulsecaringal.xyz")
 
     resend.Emails.send({
         "from": from_email,

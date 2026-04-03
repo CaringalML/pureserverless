@@ -85,6 +85,6 @@ CLOUDFRONT_KEY_PAIR_ID          = os.environ.get("CLOUDFRONT_KEY_PAIR_ID", "")
 CLOUDFRONT_PRIVATE_KEY_SSM_NAME = os.environ.get("CLOUDFRONT_PRIVATE_KEY_SSM_NAME", "")
 
 # Resend email
-DRIVE_FROM_EMAIL = os.environ.get("DRIVE_FROM_EMAIL", "noreply@nodepulsecaringal.xyz")
+DRIVE_FROM_EMAIL = os.environ.get("DRIVE_FROM_EMAIL", "drive@nodepulsecaringal.xyz")
 
 SSM_RESEND_API_KEY_NAME = os.environ.get("SSM_RESEND_API_KEY_NAME", "")
