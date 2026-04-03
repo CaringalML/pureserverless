@@ -449,14 +449,19 @@ def restore_file(request, pk):
 
     user_email = request.session.get("user_email", "")
 
-    _s3().restore_object(
-        Bucket=settings.DRIVE_BUCKET_NAME,
-        Key=file.s3_key,
-        RestoreRequest={
-            "Days": 7,
-            "GlacierJobParameters": {"Tier": "Standard"},
-        },
-    )
+    try:
+        _s3().restore_object(
+            Bucket=settings.DRIVE_BUCKET_NAME,
+            Key=file.s3_key,
+            RestoreRequest={
+                "Days": 7,
+                "GlacierJobParameters": {"Tier": "Standard"},
+            },
+        )
+    except ClientError as e:
+        code = e.response["Error"]["Code"]
+        if code != "RestoreAlreadyInProgress":
+            return JsonResponse({"error": str(e)}, status=400)
 
     file.restore_status       = DriveFile.RESTORE_PENDING
     file.restore_notify_email = user_email
