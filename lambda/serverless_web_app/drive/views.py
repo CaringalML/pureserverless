@@ -334,6 +334,28 @@ def archive_files(request):
 
 
 @cognito_login_required
+def archive_view(request):
+    """Show all archived files (Deep Archive / Glacier) across all folders."""
+    owner_sub = _get_owner_sub(request)
+    archived_files = DriveFile.objects.filter(
+        owner_sub=owner_sub,
+        storage_class__in=(DriveFile.GLACIER, DriveFile.DEEP_ARCHIVE),
+    )
+    sidebar_folders = DriveFolder.objects.filter(
+        owner_sub=owner_sub, parent=None
+    ).prefetch_related('subfolders')
+
+    return render(request, "drive/home.html", {
+        "files": archived_files,
+        "subfolders": [],
+        "current_folder": None,
+        "breadcrumbs": [],
+        "sidebar_folders": sidebar_folders,
+        "is_archive_view": True,
+    })
+
+
+@cognito_login_required
 @require_POST
 def restore_file(request, pk):
     """Initiate a Glacier restore and notify the user when it's ready."""
