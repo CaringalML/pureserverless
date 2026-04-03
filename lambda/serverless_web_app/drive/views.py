@@ -225,14 +225,32 @@ def confirm_upload(request):
 
 
 @cognito_login_required
+def get_file_url(request, pk):
+    """Return a signed CloudFront URL as JSON for the in-browser preview modal."""
+    file = get_object_or_404(DriveFile, pk=pk, owner_sub=_get_owner_sub(request))
+    if file.is_archived():
+        return JsonResponse(
+            {"error": "archived", "message": "This file is archived and cannot be previewed."},
+            status=400,
+        )
+    signed_url = _get_cloudfront_signed_url(file.s3_key, expires_seconds=3600)
+    return JsonResponse({
+        "url": signed_url,
+        "content_type": file.content_type,
+        "name": file.name,
+        "size": file.size_display(),
+    })
+
+
+@cognito_login_required
 def view_file(request, pk):
-    """Redirect to a short-lived CloudFront signed URL."""
+    """Redirect to a short-lived CloudFront signed URL (fallback / direct link)."""
     file = get_object_or_404(DriveFile, pk=pk, owner_sub=_get_owner_sub(request))
 
     if file.is_archived():
         return render(request, "drive/archived.html", {"file": file})
 
-    signed_url = _get_cloudfront_signed_url(file.s3_key, expires_seconds=300)
+    signed_url = _get_cloudfront_signed_url(file.s3_key, expires_seconds=3600)
     return redirect(signed_url)
 
 

@@ -26,6 +26,36 @@
         /* ── sidebar collapse (mobile) ── */
         sidebarOpen: true,
 
+        /* ── file preview modal ── */
+        preview: null,
+
+        async openPreview(pk) {
+            this.preview = { loading: true, name: '', url: '', content_type: '', size: '' };
+            try {
+                const resp = await fetch(`/drive/view/${pk}/url/`, {
+                    headers: { 'X-CSRFToken': this.csrf() },
+                });
+                const data = await resp.json();
+                if (data.error) {
+                    alert(data.message || data.error);
+                    this.preview = null;
+                    return;
+                }
+                this.preview = { ...data, loading: false };
+            } catch (err) {
+                alert('Could not load preview: ' + err.message);
+                this.preview = null;
+            }
+        },
+
+        closePreview() { this.preview = null; },
+
+        isImage()  { return this.preview?.content_type?.startsWith('image/'); },
+        isPdf()    { return this.preview?.content_type === 'application/pdf'; },
+        isVideo()  { return this.preview?.content_type?.startsWith('video/'); },
+        isAudio()  { return this.preview?.content_type?.startsWith('audio/'); },
+        isOther()  { return !this.preview?.loading && !this.isImage() && !this.isPdf() && !this.isVideo() && !this.isAudio(); },
+
         csrf() {
             return document.querySelector('meta[name=csrf-token]').content;
         },
@@ -332,6 +362,112 @@
 
         </div>{# /p-6 #}
     </div>{# /main content #}
+
+    {# ═══════════════════ PREVIEW MODAL ═══════════════════ #}
+    <div x-show="preview"
+         x-cloak
+         @keydown.escape.window="closePreview()"
+         class="fixed inset-0 z-50 flex flex-col bg-black/95"
+         style="display:none">
+
+        {# Top bar #}
+        <div class="flex items-center justify-between px-5 py-3 bg-slate-900 border-b border-slate-700 shrink-0">
+            <div class="flex items-center gap-3 min-w-0">
+                {# File type icon colour #}
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0"
+                     :class="isImage() ? 'text-violet-400' : isPdf() ? 'text-red-400' : isVideo() ? 'text-pink-400' : isAudio() ? 'text-green-400' : 'text-slate-400'"
+                     fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                </svg>
+                <div class="min-w-0">
+                    <p class="text-slate-100 font-medium truncate" x-text="preview?.name"></p>
+                    <p class="text-xs text-slate-500" x-text="preview?.size"></p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0 ml-4">
+                {# Download button #}
+                <a :href="preview?.url"
+                   target="_blank"
+                   rel="noopener"
+                   class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors duration-150"
+                   title="Open / Download">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0 0l-4-4m4 4l4-4"/></svg>
+                    Download
+                </a>
+                {# Close button #}
+                <button @click="closePreview()"
+                        class="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors duration-150"
+                        title="Close (Esc)">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+        </div>
+
+        {# Content area #}
+        <div class="flex-1 overflow-auto flex items-center justify-center bg-slate-950">
+
+            {# Loading spinner #}
+            <div x-show="preview?.loading" class="flex flex-col items-center gap-3">
+                <div class="spinner" style="width:32px;height:32px;border-width:3px;"></div>
+                <p class="text-slate-400 text-sm">Loading preview…</p>
+            </div>
+
+            {# Image #}
+            <template x-if="isImage()">
+                <img :src="preview.url"
+                     :alt="preview.name"
+                     class="max-w-full max-h-full object-contain p-4">
+            </template>
+
+            {# PDF #}
+            <template x-if="isPdf()">
+                <iframe :src="preview.url"
+                        class="w-full h-full border-0"
+                        style="min-height:calc(100vh - 56px)">
+                </iframe>
+            </template>
+
+            {# Video #}
+            <template x-if="isVideo()">
+                <video :src="preview.url"
+                       controls
+                       class="max-w-full max-h-full rounded-lg shadow-2xl"
+                       style="max-height:calc(100vh - 80px)">
+                </video>
+            </template>
+
+            {# Audio #}
+            <template x-if="isAudio()">
+                <div class="flex flex-col items-center gap-6 p-8">
+                    <div class="w-24 h-24 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/></svg>
+                    </div>
+                    <p class="text-slate-200 font-medium" x-text="preview.name"></p>
+                    <audio :src="preview.url" controls class="w-80"></audio>
+                </div>
+            </template>
+
+            {# Other file types — show download prompt #}
+            <template x-if="isOther()">
+                <div class="flex flex-col items-center gap-5 p-8 text-center">
+                    <div class="w-20 h-20 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                    </div>
+                    <div>
+                        <p class="text-slate-200 font-semibold text-lg" x-text="preview.name"></p>
+                        <p class="text-slate-500 text-sm mt-1" x-text="preview.size"></p>
+                        <p class="text-slate-500 text-xs mt-0.5" x-text="preview.content_type"></p>
+                    </div>
+                    <p class="text-slate-400 text-sm">No preview available for this file type.</p>
+                    <a :href="preview.url" target="_blank" rel="noopener"
+                       class="btn-primary" style="width:auto;padding:10px 24px;">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0 0l-4-4m4 4l4-4"/></svg>
+                        Download file
+                    </a>
+                </div>
+            </template>
+        </div>
+    </div>{# /preview modal #}
 
 </div>{# /flex wrapper #}
 {% endblock %}

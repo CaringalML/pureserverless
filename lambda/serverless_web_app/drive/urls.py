@@ -8,6 +8,7 @@ urlpatterns = [
     path("folder/<int:pk>/delete/",       views.delete_folder,  name="drive_delete_folder"),
     path("upload-url/",                   views.upload_url,     name="drive_upload_url"),
     path("confirm/",                      views.confirm_upload,  name="drive_confirm"),
+    path("view/<int:pk>/url/",            views.get_file_url,   name="drive_file_url"),
     path("view/<int:pk>/",               views.view_file,      name="drive_view"),
     path("delete/<int:pk>/",             views.delete_file,    name="drive_delete"),
     path("archive/",                      views.archive_files,  name="drive_archive"),
