@@ -3,6 +3,8 @@ import json
 import uuid
 from urllib.parse import quote
 
+import resend
+
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
@@ -290,32 +292,72 @@ def delete_file(request, pk):
 @cognito_login_required
 @require_POST
 def archive_files(request):
-    """Move selected files to Glacier Flexible or Deep Archive immediately."""
+    """Move selected files to Glacier Deep Archive and notify the user by email."""
     try:
-        data = json.loads(request.body)
-        file_ids     = data.get("ids", [])
-        target_class = data.get("storage_class", "GLACIER")
-        owner_sub    = _get_owner_sub(request)
+        data      = json.loads(request.body)
+        file_ids  = data.get("ids", [])
+        owner_sub = _get_owner_sub(request)
 
-        if target_class not in ("GLACIER", "DEEP_ARCHIVE"):
-            return JsonResponse({"error": "Invalid storage class"}, status=400)
-
-        files = DriveFile.objects.filter(id__in=file_ids, owner_sub=owner_sub)
+        files        = DriveFile.objects.filter(id__in=file_ids, owner_sub=owner_sub)
         updated_html = []
+        archived_names = []
 
         for f in files:
             _s3().copy_object(
                 Bucket=settings.DRIVE_BUCKET_NAME,
                 CopySource={"Bucket": settings.DRIVE_BUCKET_NAME, "Key": f.s3_key},
                 Key=f.s3_key,
-                StorageClass=target_class,
+                StorageClass="DEEP_ARCHIVE",
                 MetadataDirective="COPY",
             )
-            f.storage_class = target_class
+            f.storage_class = "DEEP_ARCHIVE"
             f.save(update_fields=["storage_class"])
             html = render(request, "drive/partials/file_row.html", {"file": f}).content.decode()
             updated_html.append({"id": f.id, "html": html})
+            archived_names.append(f.name)
+
+        # Send email notification
+        user_email = request.session.get("user_email", "")
+        if user_email and archived_names and settings.RESEND_API_KEY:
+            _send_archive_email(user_email, archived_names)
 
         return JsonResponse({"updated": updated_html})
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
+
+
+def _send_archive_email(to_email, file_names):
+    """Send a Resend email confirming files were moved to Glacier Deep Archive."""
+    resend.api_key = settings.RESEND_API_KEY
+
+    file_list_html = "".join(
+        f'<li style="padding:4px 0;color:#cbd5e1;">{name}</li>'
+        for name in file_names
+    )
+    count = len(file_names)
+    noun  = "file" if count == 1 else "files"
+
+    html_body = f"""
+    <div style="font-family:sans-serif;max-width:560px;margin:0 auto;background:#0f172a;padding:32px;border-radius:12px;">
+        <h2 style="color:#f1f5f9;margin-top:0;">StrawDrive — Archive Confirmation</h2>
+        <p style="color:#94a3b8;">
+            {count} {noun} have been moved to <strong style="color:#a78bfa;">Glacier Deep Archive</strong>.
+        </p>
+        <ul style="background:#1e293b;border-radius:8px;padding:16px 16px 16px 32px;margin:16px 0;">
+            {file_list_html}
+        </ul>
+        <p style="color:#64748b;font-size:13px;">
+            Archived files cannot be previewed or downloaded directly. To restore them,
+            you will need to initiate a Glacier restore request (retrieval time: 12–48 hours).
+        </p>
+        <hr style="border:none;border-top:1px solid #1e293b;margin:24px 0;">
+        <p style="color:#475569;font-size:12px;margin:0;">StrawDrive &nbsp;·&nbsp; nodepulsecaringal.xyz</p>
+    </div>
+    """
+
+    resend.Emails.send({
+        "from": settings.DRIVE_FROM_EMAIL,
+        "to": [to_email],
+        "subject": f"StrawDrive: {count} {noun} archived to Glacier Deep Archive",
+        "html": html_body,
+    })

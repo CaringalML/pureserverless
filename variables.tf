@@ -27,3 +27,9 @@ variable "custom_domain" {
   type        = string
   default     = "drive.nodepulsecaringal.xyz"
 }
+
+variable "resend_api_key" {
+  description = "Resend API key for sending email notifications"
+  type        = string
+  sensitive   = true
+}

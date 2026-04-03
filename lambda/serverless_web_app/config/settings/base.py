@@ -83,3 +83,7 @@ DRIVE_BUCKET_NAME               = os.environ.get("DRIVE_BUCKET_NAME", "")
 CLOUDFRONT_DOMAIN               = os.environ.get("CLOUDFRONT_DOMAIN", "")
 CLOUDFRONT_KEY_PAIR_ID          = os.environ.get("CLOUDFRONT_KEY_PAIR_ID", "")
 CLOUDFRONT_PRIVATE_KEY_SSM_NAME = os.environ.get("CLOUDFRONT_PRIVATE_KEY_SSM_NAME", "")
+
+# Resend email
+RESEND_API_KEY    = os.environ.get("RESEND_API_KEY", "")
+DRIVE_FROM_EMAIL  = os.environ.get("DRIVE_FROM_EMAIL", "drive@nodepulsecaringal.xyz")
