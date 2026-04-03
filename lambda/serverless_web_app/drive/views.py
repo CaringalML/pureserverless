@@ -447,7 +447,7 @@ def restore_file(request, pk):
         _send_restore_started_email(user_email, file.name)
 
     html = render(request, "drive/partials/file_row.html", {"file": file}).content.decode()
-    return JsonResponse({"html": html})
+    return HttpResponse(html, content_type="text/html")
 
 
 def _send_restore_started_email(to_email, file_name):
