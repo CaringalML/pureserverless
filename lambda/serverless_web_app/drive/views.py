@@ -88,7 +88,7 @@ def drive_home(request, folder_pk=None):
         current_folder = get_object_or_404(DriveFolder, pk=folder_pk, owner_sub=owner_sub)
         breadcrumbs = _build_breadcrumbs(current_folder)
 
-    files = DriveFile.objects.filter(owner_sub=owner_sub, folder=current_folder)
+    files = DriveFile.objects.filter(owner_sub=owner_sub, folder=current_folder, deleted_at__isnull=True)
     subfolders = DriveFolder.objects.filter(owner_sub=owner_sub, parent=current_folder)
 
     # Sidebar: top-level folders with one level of children pre-fetched
@@ -157,15 +157,13 @@ def delete_folder(request, pk):
         return ids
 
     folder_ids = _collect_folder_ids(folder)
-    files_to_delete = DriveFile.objects.filter(owner_sub=owner_sub, folder_id__in=folder_ids)
-    s3 = _s3()
-    for f in files_to_delete:
-        try:
-            s3.delete_object(Bucket=settings.DRIVE_BUCKET_NAME, Key=f.s3_key)
-        except ClientError:
-            pass
+    # Soft-delete all files in the subtree — they go to Recycle Bin
+    now = datetime.datetime.now(datetime.timezone.utc)
+    DriveFile.objects.filter(
+        owner_sub=owner_sub, folder_id__in=folder_ids, deleted_at__isnull=True
+    ).update(deleted_at=now, folder=None)
 
-    folder.delete()  # CASCADE handles sub-folders in DB
+    folder.delete()  # CASCADE removes sub-folders from DB
     return HttpResponse("")
 
 
@@ -286,14 +284,67 @@ def view_file(request, pk):
 @cognito_login_required
 @require_POST
 def delete_file(request, pk):
-    """Delete from S3 and DB, return empty response so HTMX removes the row."""
-    file = get_object_or_404(DriveFile, pk=pk, owner_sub=_get_owner_sub(request))
+    """Soft-delete: move to Recycle Bin. Permanent deletion happens after 30 days."""
+    file = get_object_or_404(DriveFile, pk=pk, owner_sub=_get_owner_sub(request), deleted_at__isnull=True)
+    file.deleted_at = datetime.datetime.now(datetime.timezone.utc)
+    file.save(update_fields=["deleted_at"])
+    return HttpResponse("")
+
+
+@cognito_login_required
+@require_POST
+def restore_from_bin(request, pk):
+    """Restore a file from the Recycle Bin back to My Drive."""
+    file = get_object_or_404(DriveFile, pk=pk, owner_sub=_get_owner_sub(request), deleted_at__isnull=False)
+    file.deleted_at = None
+    file.save(update_fields=["deleted_at"])
+    html = render(request, "drive/partials/recycle_row.html", {"file": file}).content.decode()
+    return JsonResponse({"restored": True, "html": html})
+
+
+@cognito_login_required
+@require_POST
+def permanent_delete(request, pk):
+    """Permanently delete a file from S3 and DB — no recovery possible."""
+    file = get_object_or_404(DriveFile, pk=pk, owner_sub=_get_owner_sub(request), deleted_at__isnull=False)
     try:
         _s3().delete_object(Bucket=settings.DRIVE_BUCKET_NAME, Key=file.s3_key)
     except ClientError:
         pass
     file.delete()
     return HttpResponse("")
+
+
+@cognito_login_required
+def recycle_bin(request):
+    """Show all soft-deleted files within the 30-day window."""
+    owner_sub = _get_owner_sub(request)
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
+
+    # Auto-permanently-delete files whose 30-day window has expired
+    expired = DriveFile.objects.filter(owner_sub=owner_sub, deleted_at__lt=cutoff)
+    s3 = _s3()
+    for f in expired:
+        try:
+            s3.delete_object(Bucket=settings.DRIVE_BUCKET_NAME, Key=f.s3_key)
+        except ClientError:
+            pass
+    expired.delete()
+
+    bin_files = DriveFile.objects.filter(owner_sub=owner_sub, deleted_at__isnull=False)
+
+    sidebar_folders = DriveFolder.objects.filter(
+        owner_sub=owner_sub, parent=None
+    ).prefetch_related('subfolders')
+
+    return render(request, "drive/home.html", {
+        "files": bin_files,
+        "subfolders": [],
+        "current_folder": None,
+        "breadcrumbs": [],
+        "sidebar_folders": sidebar_folders,
+        "is_recycle_bin": True,
+    })
 
 
 @cognito_login_required
@@ -340,6 +391,7 @@ def archive_view(request):
     archived_files = DriveFile.objects.filter(
         owner_sub=owner_sub,
         storage_class__in=(DriveFile.GLACIER, DriveFile.DEEP_ARCHIVE),
+        deleted_at__isnull=True,
     )
     sidebar_folders = DriveFolder.objects.filter(
         owner_sub=owner_sub, parent=None

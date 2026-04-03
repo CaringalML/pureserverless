@@ -65,6 +65,8 @@ class DriveFile(models.Model):
                                             choices=RESTORE_STATUS_CHOICES)
     restore_notify_email = models.EmailField(blank=True, default="")
 
+    deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
     class Meta:
         ordering = ["-uploaded_at"]
 
@@ -80,3 +82,14 @@ class DriveFile(models.Model):
 
     def is_archived(self):
         return self.storage_class in (self.GLACIER, self.DEEP_ARCHIVE)
+
+    def is_deleted(self):
+        return self.deleted_at is not None
+
+    def days_until_permanent_delete(self):
+        if not self.deleted_at:
+            return None
+        import datetime
+        expires = self.deleted_at + datetime.timedelta(days=30)
+        remaining = (expires - datetime.datetime.now(datetime.timezone.utc)).days
+        return max(remaining, 0)
