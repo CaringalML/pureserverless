@@ -61,6 +61,7 @@ resource "aws_iam_role_policy" "lambda_s3_drive" {
           "s3:CopyObject",
           "s3:HeadObject",
           "s3:ListBucket",
+          "s3:RestoreObject",
         ]
         Resource = [
           aws_s3_bucket.drive.arn,
