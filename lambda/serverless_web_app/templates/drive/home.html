@@ -252,11 +252,21 @@
             {% endfor %}
         </div>
 
-        {# Storage usage #}
-        {% if storage_used %}
-        <div class="px-4 py-3 border-t border-zinc-800/80 flex items-center justify-between">
-            <span class="text-[11px] text-zinc-500 font-medium uppercase tracking-wide">Storage used</span>
-            <span class="text-[11px] text-zinc-400 font-medium">{{ storage_used }}</span>
+        {# Storage / file count stats #}
+        {% if storage_used or total_files %}
+        <div class="px-4 py-3 border-t border-zinc-800/80 space-y-1.5">
+            {% if total_files %}
+            <div class="flex items-center justify-between">
+                <span class="text-[11px] text-zinc-500 font-medium uppercase tracking-wide">Total files</span>
+                <span class="text-[11px] text-zinc-400 font-medium">{{ total_files }}</span>
+            </div>
+            {% endif %}
+            {% if storage_used %}
+            <div class="flex items-center justify-between">
+                <span class="text-[11px] text-zinc-500 font-medium uppercase tracking-wide">Storage used</span>
+                <span class="text-[11px] text-zinc-400 font-medium">{{ storage_used }}</span>
+            </div>
+            {% endif %}
         </div>
         {% endif %}
 
@@ -468,34 +478,13 @@
             </div>
             {% endif %}{# /not is_archive_view #}
 
-            {# ── Archive toolbar — appears when files are checked (hidden on archive view) ── #}
-            {% if not is_archive_view %}
+            {# ── Selection count indicator ── #}
             <div x-show="selected.length > 0" x-cloak x-transition
-                 class="bg-[#13151c] border border-zinc-600/80 rounded-xl px-5 py-3 mb-5 flex items-center gap-4 flex-wrap">
-                <span class="text-sm text-zinc-300" x-text="`${selected.length} file${selected.length > 1 ? 's' : ''} selected`"></span>
-                <span class="text-xs text-purple-400 bg-purple-900/30 border border-purple-800 rounded-lg px-2 py-1">Glacier Deep Archive</span>
-                <button class="btn-primary text-sm" style="width:auto;padding:7px 16px;" :disabled="archiving"
-                        @click="
-                            archiving = true;
-                            const resp = await fetch('{% url 'drive_archive' %}', {
-                                method: 'POST',
-                                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
-                                body: JSON.stringify({ ids: selected })
-                            });
-                            const data = await resp.json();
-                            data.updated?.forEach(({ id, html }) => {
-                                const el = document.getElementById('file-' + id);
-                                if (el) el.outerHTML = html;
-                            });
-                            selected = [];
-                            archiving = false;
-                        ">
-                    <span class="spinner" x-show="archiving" x-cloak></span>
-                    <span x-text="archiving ? 'Archiving…' : 'Archive'"></span>
-                </button>
-                <button class="text-zinc-400 hover:text-zinc-200 text-sm transition" @click="selected = []">Cancel</button>
+                 class="flex items-center gap-2 mb-4">
+                <span class="text-xs text-zinc-400 bg-zinc-800/60 border border-zinc-700/60 rounded-lg px-2.5 py-1"
+                      x-text="`${selected.length} file${selected.length > 1 ? 's' : ''} selected`"></span>
+                <button class="text-xs text-zinc-500 hover:text-zinc-300 transition" @click="selected = []">Clear</button>
             </div>
-            {% endif %}{# /not is_archive_view #}
 
             {# ── Live search results target ── #}
             <div id="search-results">
@@ -512,7 +501,7 @@
          class="w-52 bg-[#1a1d27] border border-zinc-700/60 rounded-xl shadow-2xl shadow-black/60 overflow-hidden py-1">
 
         {# Preview — only if not archived or is restored #}
-        <button x-show="!ctx.archived || ctx.restoreStatus === 'ready'"
+        <button x-show="selected.length === 1 && (!ctx.archived || ctx.restoreStatus === 'ready')"
                 @click="openPreview(ctx.pk); closeCtx()"
                 class="w-full flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-white/5 hover:text-zinc-100 transition-colors">
             <svg class="w-4 h-4 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
@@ -527,6 +516,33 @@
             <svg class="w-4 h-4 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 12v-8m0 8l-3-3m3 3l3-3"/></svg>
             Download
         </a>
+
+        {# Archive to Deep Archive — non-archived files only #}
+        <button x-show="!ctx.archived"
+                @click="
+                    const label = selected.length > 1 ? `${selected.length} files` : `'${ctx.name}'`;
+                    if(confirm(`Archive ${label} to Glacier Deep Archive?`)) {
+                        archiving = true;
+                        const ids = selected.length > 0 ? selected : [ctx.pk];
+                        fetch('{% url 'drive_archive' %}', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
+                            body: JSON.stringify({ ids })
+                        }).then(r => r.json()).then(data => {
+                            data.updated?.forEach(({ id, html }) => {
+                                const el = document.getElementById('file-' + id);
+                                if (el) el.outerHTML = html;
+                            });
+                            selected = [];
+                            archiving = false;
+                        });
+                    }
+                    closeCtx();
+                "
+                class="w-full flex items-center gap-3 px-4 py-2 text-sm text-purple-400 hover:bg-white/5 hover:text-purple-300 transition-colors">
+            <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+            Archive to Deep Archive
+        </button>
 
         {# Restore — archived and not yet requested #}
         <button x-show="ctx.archived && ctx.restoreStatus === ''"

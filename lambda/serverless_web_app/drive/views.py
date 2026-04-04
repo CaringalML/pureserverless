@@ -169,6 +169,7 @@ def drive_home(request, folder_pk=None):
         owner_sub=owner_sub, parent=None
     ).prefetch_related('subfolders', 'subfolders__subfolders', 'subfolders__subfolders__subfolders')
     _, ctx["storage_used"], ctx["storage_pct"] = _storage_stats(owner_sub)
+    ctx["total_files"] = DriveFile.objects.filter(owner_sub=owner_sub, deleted_at__isnull=True).count()
 
     return render(request, "drive/home.html", ctx)
 
@@ -420,6 +421,7 @@ def recycle_bin(request):
         owner_sub=owner_sub, parent=None
     ).prefetch_related('subfolders', 'subfolders__subfolders', 'subfolders__subfolders__subfolders')
     _, ctx["storage_used"], ctx["storage_pct"] = _storage_stats(owner_sub)
+    ctx["total_files"] = DriveFile.objects.filter(owner_sub=owner_sub, deleted_at__isnull=True).count()
 
     return render(request, "drive/home.html", ctx)
 
@@ -495,6 +497,7 @@ def archive_view(request):
         owner_sub=owner_sub, parent=None
     ).prefetch_related('subfolders', 'subfolders__subfolders', 'subfolders__subfolders__subfolders')
     _, ctx["storage_used"], ctx["storage_pct"] = _storage_stats(owner_sub)
+    ctx["total_files"] = DriveFile.objects.filter(owner_sub=owner_sub, deleted_at__isnull=True).count()
 
     return render(request, "drive/home.html", ctx)
 
