@@ -252,23 +252,30 @@
             {% endfor %}
         </div>
 
-        {# Storage / file count stats #}
-        {% if storage_used or total_files %}
+        {# Sidebar stats + selection #}
         <div class="px-4 py-3 border-t border-zinc-800/80 space-y-1.5">
-            {% if total_files %}
             <div class="flex items-center justify-between">
-                <span class="text-[11px] text-zinc-500 font-medium uppercase tracking-wide">Total files</span>
-                <span class="text-[11px] text-zinc-400 font-medium">{{ total_files }}</span>
+                <span class="text-[11px] text-zinc-500 font-medium uppercase tracking-wide">Folders</span>
+                <span class="text-[11px] text-zinc-400 font-medium">{{ subfolders|length }}</span>
             </div>
-            {% endif %}
-            {% if storage_used %}
             <div class="flex items-center justify-between">
+                <span class="text-[11px] text-zinc-500 font-medium uppercase tracking-wide">Files</span>
+                <span class="text-[11px] text-zinc-400 font-medium">{{ files|length }}</span>
+            </div>
+            {# Selected count — Alpine driven, only shown when > 0 #}
+            <div x-show="selected.length > 0" x-cloak class="flex items-center justify-between">
+                <span class="text-[11px] text-sky-400 font-medium uppercase tracking-wide"
+                      x-text="`${selected.length} selected`"></span>
+                <button class="text-[11px] text-zinc-500 hover:text-zinc-300 transition"
+                        @click="selected = []">Clear</button>
+            </div>
+            {% if storage_used %}
+            <div class="flex items-center justify-between pt-0.5 border-t border-zinc-800/60 mt-1">
                 <span class="text-[11px] text-zinc-500 font-medium uppercase tracking-wide">Storage used</span>
                 <span class="text-[11px] text-zinc-400 font-medium">{{ storage_used }}</span>
             </div>
             {% endif %}
         </div>
-        {% endif %}
 
         {# Profile section #}
         <div class="p-3 border-t border-zinc-800/80"
@@ -478,13 +485,6 @@
             </div>
             {% endif %}{# /not is_archive_view #}
 
-            {# ── Selection count indicator ── #}
-            <div x-show="selected.length > 0" x-cloak x-transition
-                 class="flex items-center gap-2 mb-4">
-                <span class="text-xs text-zinc-400 bg-zinc-800/60 border border-zinc-700/60 rounded-lg px-2.5 py-1"
-                      x-text="`${selected.length} file${selected.length > 1 ? 's' : ''} selected`"></span>
-                <button class="text-xs text-zinc-500 hover:text-zinc-300 transition" @click="selected = []">Clear</button>
-            </div>
 
             {# ── Live search results target ── #}
             <div id="search-results">
