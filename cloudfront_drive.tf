@@ -17,6 +17,27 @@ resource "aws_cloudfront_distribution" "drive" {
     origin_access_control_id = aws_cloudfront_origin_access_control.drive.id
   }
 
+  # Public path for static assets (logo, favicon) — no signed URL required
+  ordered_cache_behavior {
+    path_pattern           = "/static/*"
+    target_origin_id       = "S3DriveOrigin"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    compress               = true
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    min_ttl     = 0
+    default_ttl = 86400   # 24 hours
+    max_ttl     = 604800  # 7 days
+  }
+
   default_cache_behavior {
     target_origin_id       = "S3DriveOrigin"
     viewer_protocol_policy = "redirect-to-https"

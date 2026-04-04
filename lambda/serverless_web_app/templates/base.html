@@ -5,8 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token }}">
     <title>{% block title %}NovaDrive{% endblock %}</title>
-    {% load static %}
-    <link rel="icon" type="image/x-icon" href="{% static 'img/novadrive.ico' %}">
+    <link rel="icon" type="image/x-icon" href="https://d2xxgikten2tv4.cloudfront.net/static/img/novadrive.ico">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
@@ -76,7 +75,7 @@
     <nav class="bg-[#13151c] border-b border-zinc-800 px-6 py-4">
         <div class="max-w-3xl mx-auto flex items-center justify-between">
             <a href="{% url 'drive_home' %}" class="flex items-center gap-2.5 group">
-                <img src="{% static 'img/novadrive.png' %}" alt="NovaDrive" class="w-8 h-8 object-contain shrink-0">
+                <img src="https://d2xxgikten2tv4.cloudfront.net/static/img/novadrive.png" alt="NovaDrive" class="w-8 h-8 object-contain shrink-0">
                 <span class="text-base font-bold tracking-tight text-white">Nova<span class="text-sky-400">Drive</span></span>
             </a>
             <div class="flex items-center gap-4 text-sm">
