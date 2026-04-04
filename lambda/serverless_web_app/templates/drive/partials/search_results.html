@@ -11,8 +11,7 @@
 
 {# Folder list (hidden on archive/bin views) #}
 {% if not is_archive_view and not is_recycle_bin %}
-<div id="folder-list" class="mb-2"
-     :class="view === 'grid' ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3' : 'space-y-2'">
+<div id="folder-list" class="mb-2">
     {% for folder in subfolders %}
         {% include "drive/partials/folder_row.html" %}
     {% endfor %}
@@ -20,8 +19,7 @@
 {% endif %}
 
 {# File list #}
-<div id="file-list"
-     :class="view === 'grid' ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3' : 'space-y-2'">
+<div id="file-list">
     {% for file in files %}
         {% if is_recycle_bin %}
             {% include "drive/partials/recycle_row.html" %}

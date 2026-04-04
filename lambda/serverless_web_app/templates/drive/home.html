@@ -10,6 +10,7 @@
 {% block content %}
 {# ── Alpine scope covers the entire page ────────────────────────────────── #}
 <div class="flex flex-1 overflow-hidden"
+     :data-view="view"
      x-data="{
         /* ── upload ── */
         uploading: false,
