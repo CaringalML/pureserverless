@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}NovaDrive{% endblock %}
 
@@ -181,11 +182,7 @@
         {# ── Brand header ── #}
         <div class="px-5 py-5 border-b border-zinc-800/80">
             <a href="{% url 'drive_home' %}" class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 flex items-center justify-center shrink-0 shadow-lg shadow-sky-500/25">
-                    <svg class="w-4 h-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
-                    </svg>
-                </div>
+                <img src="{% static 'img/novadrive.png' %}" alt="NovaDrive" class="w-9 h-9 object-contain shrink-0">
                 <div>
                     <p class="text-base font-bold leading-none tracking-tight text-white">Nova<span class="text-sky-400">Drive</span></p>
                     <p class="text-[10px] text-zinc-500 mt-0.5 tracking-wide uppercase">Cloud Storage</p>

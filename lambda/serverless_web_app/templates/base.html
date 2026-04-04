@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token }}">
     <title>{% block title %}NovaDrive{% endblock %}</title>
+    {% load static %}
+    <link rel="icon" type="image/x-icon" href="{% static 'img/novadrive.ico' %}">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
@@ -74,11 +76,7 @@
     <nav class="bg-[#13151c] border-b border-zinc-800 px-6 py-4">
         <div class="max-w-3xl mx-auto flex items-center justify-between">
             <a href="{% url 'drive_home' %}" class="flex items-center gap-2.5 group">
-                <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-sky-400 to-indigo-500 flex items-center justify-center shrink-0 shadow-lg shadow-sky-500/20">
-                    <svg class="w-4 h-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
-                    </svg>
-                </div>
+                <img src="{% static 'img/novadrive.png' %}" alt="NovaDrive" class="w-8 h-8 object-contain shrink-0">
                 <span class="text-base font-bold tracking-tight text-white">Nova<span class="text-sky-400">Drive</span></span>
             </a>
             <div class="flex items-center gap-4 text-sm">
