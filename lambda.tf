@@ -24,7 +24,7 @@ resource "aws_lambda_function" "serverless_web_app" {
       # Cognito — IDs are not secrets, but the actual auth is enforced by Cognito itself
       COGNITO_USER_POOL_ID   = aws_cognito_user_pool.main.id
       COGNITO_CLIENT_ID      = aws_cognito_user_pool_client.main.id
-      # StrawDrive
+      # NovaDrive
       DRIVE_BUCKET_NAME               = aws_s3_bucket.drive.bucket
       CLOUDFRONT_DOMAIN               = aws_cloudfront_distribution.drive.domain_name
       CLOUDFRONT_KEY_PAIR_ID          = aws_cloudfront_public_key.drive.id

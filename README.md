@@ -1,6 +1,6 @@
-# StrawDrive
+# NovaDrive
 
-A Google Drive-like file storage web app running on AWS Lambda — fully serverless, no EC2, no servers to manage. Push to `strawdrive` and it deploys itself.
+A Google Drive-like file storage web app running on AWS Lambda — fully serverless, no EC2, no servers to manage. Push to `novadrive` and it deploys itself.
 
 **Live stack:** Django 5 → Mangum → AWS Lambda → API Gateway v2 → CloudFront → S3  
 **Auth:** AWS Cognito (signup, email verify, signin, forgot/reset password)  
@@ -61,9 +61,9 @@ Terraform Remote State
 | `hello-world` | Minimal Django hello world page |
 | `CRUD` | Django CRUD with HTMX inline edits |
 | `auth` | AWS Cognito authentication — signup, verify, signin, dashboard, forgot/reset password |
-| `strawdrive` | **Current** — full file storage app (S3 + CloudFront + Cognito + custom domain) |
+| `novadrive` | **Current** — full file storage app (S3 + CloudFront + Cognito + custom domain) |
 
-The CI/CD pipeline triggers on pushes to `strawdrive`. See [.github/workflows/deploy.yml](.github/workflows/deploy.yml).
+The CI/CD pipeline triggers on pushes to `novadrive`. See [.github/workflows/deploy.yml](.github/workflows/deploy.yml).
 
 ---
 
@@ -73,26 +73,26 @@ The CI/CD pipeline triggers on pushes to `strawdrive`. See [.github/workflows/de
 .
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml              # CI/CD pipeline (triggers on strawdrive branch)
+│       └── deploy.yml              # CI/CD pipeline (triggers on novadrive branch)
 ├── lambda/
 │   └── serverless_web_app/         # Django application
 │       ├── config/
 │       │   ├── urls.py
 │       │   └── settings/
-│       │       ├── base.py         # shared settings, SSM fetch, StrawDrive config
+│       │       ├── base.py         # shared settings, SSM fetch, NovaDrive config
 │       │       ├── dev.py          # local dev (DEBUG=True, no SSM)
 │       │       └── prod.py         # Lambda prod (secure headers, CSRF origins)
 │       ├── accounts/               # Cognito auth app
 │       │   ├── views.py            # signup, verify, signin, signout, forgot/reset
 │       │   ├── forms.py            # SignUpForm, SignInForm, ForgotPasswordForm, ResetPasswordForm
 │       │   └── urls.py
-│       ├── drive/                  # StrawDrive app
+│       ├── drive/                  # NovaDrive app
 │       │   ├── models.py           # DriveFile (owner_sub, name, s3_key, size, content_type, storage_class)
 │       │   ├── views.py            # upload_url, confirm_upload, view_file, delete_file, archive_files
 │       │   ├── urls.py
 │       │   └── migrations/
 │       ├── templates/
-│       │   ├── base.html           # StrawDrive layout + avatar dropdown
+│       │   ├── base.html           # NovaDrive layout + avatar dropdown
 │       │   ├── accounts/           # signup, verify, signin, forgot/reset templates
 │       │   └── drive/
 │       │       └── home.html       # file list + XHR upload with progress bar
@@ -122,7 +122,7 @@ The CI/CD pipeline triggers on pushes to `strawdrive`. See [.github/workflows/de
 
 ## File Storage — S3 Lifecycle Tiers
 
-StrawDrive automatically moves files through cheaper storage tiers as they age:
+NovaDrive automatically moves files through cheaper storage tiers as they age:
 
 | Tier | Trigger | Retrieval | Use case |
 |------|---------|-----------|----------|
@@ -260,10 +260,10 @@ Go to **Settings → Secrets and variables → Actions** and add:
 
 The IAM user needs permissions for: Lambda, API Gateway, IAM, CloudWatch Logs, S3, DynamoDB, SSM, Cognito, CloudFront, ACM, SNS.
 
-### 4. Push to the strawdrive branch
+### 4. Push to the novadrive branch
 
 ```bash
-git push origin strawdrive
+git push origin novadrive
 ```
 
 GitHub Actions will: install dependencies → run migrations → terraform plan → terraform apply.
@@ -278,10 +278,10 @@ AWS sends a confirmation email to `lawrencecaringal5@gmail.com` after the first 
 
 ## CI/CD Pipeline
 
-Defined in [.github/workflows/deploy.yml](.github/workflows/deploy.yml). Triggers on push to `strawdrive`.
+Defined in [.github/workflows/deploy.yml](.github/workflows/deploy.yml). Triggers on push to `novadrive`.
 
 ```
-push to strawdrive
+push to novadrive
     ├── pip install -r requirements.txt -t lambda/serverless_web_app/  (for Lambda zip)
     ├── pip install -r requirements.txt                                 (for manage.py migrate)
     ├── python manage.py migrate
@@ -294,7 +294,7 @@ push to strawdrive
 
 ## Authentication (Cognito)
 
-StrawDrive uses AWS Cognito with the `USER_PASSWORD_AUTH` flow. No third-party auth libraries — direct Cognito API calls via boto3.
+NovaDrive uses AWS Cognito with the `USER_PASSWORD_AUTH` flow. No third-party auth libraries — direct Cognito API calls via boto3.
 
 | Route | Description |
 |-------|-------------|
@@ -513,10 +513,10 @@ def _s3():
 **How to verify the fix worked:** Open browser DevTools → Console. The upload log line should show the regional URL:
 ```
 # Bad  (global endpoint — will CORS fail):
-[StrawDrive] Uploading to: https://serverless-web-app-drive-dev.s3.amazonaws.com/
+[NovaDrive] Uploading to: https://serverless-web-app-drive-dev.s3.amazonaws.com/
 
 # Good (regional endpoint — works):
-[StrawDrive] Uploading to: https://s3.ap-southeast-2.amazonaws.com/serverless-web-app-drive-dev
+[NovaDrive] Uploading to: https://s3.ap-southeast-2.amazonaws.com/serverless-web-app-drive-dev
 ```
 
 S3 response status `204` confirms a successful upload.

@@ -85,7 +85,7 @@ def _handle_restore_completed(s3_key):
     resend.Emails.send({
         "from": from_email,
         "to": [notify_email],
-        "subject": f'StrawDrive: "{file_name}" is ready to download',
+        "subject": f'NovaDrive: "{file_name}" is ready to download',
         "html": _build_ready_email(file_name),
     })
 
@@ -116,7 +116,7 @@ def _build_ready_email(file_name):
             <a href="{drive_url}"
                style="display:inline-block;background:#0ea5e9;color:#fff;text-decoration:none;
                       font-weight:600;padding:12px 28px;border-radius:8px;font-size:15px;">
-                Go to StrawDrive &rarr;
+                Go to NovaDrive &rarr;
             </a>
         </div>
 
@@ -129,7 +129,7 @@ def _build_ready_email(file_name):
 
         <hr style="border:none;border-top:1px solid #1e293b;margin:24px 0;">
         <p style="color:#475569;font-size:12px;margin:0;text-align:center;">
-            StrawDrive &nbsp;·&nbsp; nodepulsecaringal.xyz
+            NovaDrive &nbsp;·&nbsp; nodepulsecaringal.xyz
         </p>
     </div>
     """

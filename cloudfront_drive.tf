@@ -8,7 +8,7 @@ resource "aws_cloudfront_origin_access_control" "drive" {
 
 resource "aws_cloudfront_distribution" "drive" {
   enabled         = true
-  comment         = "StrawDrive file delivery — ${var.environment}"
+  comment         = "NovaDrive file delivery — ${var.environment}"
   price_class     = "PriceClass_All"
 
   origin {

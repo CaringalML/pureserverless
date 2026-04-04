@@ -2,7 +2,7 @@ name: Deploy Infrastructure
 
 # EDIT ONLY THIS LINE
 env:
-  TARGET_BRANCH: strawdrive  # Switch to 'hello-world', 'CRUD', 'auth', or 'strawdrive' as needed.
+  TARGET_BRANCH: novadrive  # Switch to 'hello-world', 'CRUD', 'auth', or 'novadrive' as needed.
   AWS_REGION: ap-southeast-2
   TF_VERSION: 1.6.6
   PYTHON_VERSION: "3.12"
@@ -10,9 +10,9 @@ env:
 on:
   push:
     # EDIT THIS to match TARGET_BRANCH above
-    branches: ["strawdrive"]
+    branches: ["novadrive"]
   pull_request:
-    branches: ["strawdrive"]
+    branches: ["novadrive"]
   workflow_dispatch:
 
 jobs:

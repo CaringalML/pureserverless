@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token }}">
-    <title>{% block title %}StrawDrive{% endblock %}</title>
+    <title>{% block title %}NovaDrive{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
     <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
@@ -68,18 +68,26 @@
     </style>
     {% block extra_head %}{% endblock %}
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+<body class="bg-[#0d0f14] text-zinc-100 min-h-screen flex flex-col">
 
-    <nav class="bg-slate-800 border-b border-slate-700 px-6 py-4">
+    {% block navbar %}
+    <nav class="bg-[#13151c] border-b border-zinc-800 px-6 py-4">
         <div class="max-w-3xl mx-auto flex items-center justify-between">
-            <a href="{% url 'drive_home' %}" class="text-sky-400 font-bold text-lg tracking-wide hover:text-sky-300 transition">StrawDrive</a>
+            <a href="{% url 'drive_home' %}" class="flex items-center gap-2.5 group">
+                <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-sky-400 to-indigo-500 flex items-center justify-center shrink-0 shadow-lg shadow-sky-500/20">
+                    <svg class="w-4 h-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
+                    </svg>
+                </div>
+                <span class="text-base font-bold tracking-tight text-white">Nova<span class="text-sky-400">Drive</span></span>
+            </a>
             <div class="flex items-center gap-4 text-sm">
                 {% if request.session.access_token %}
                     {% block nav_extra %}
                     <!-- Avatar dropdown -->
                     <div class="relative" x-data="{ open: false }" @click.outside="open = false">
                         <button @click="open = !open"
-                                class="w-9 h-9 rounded-full bg-sky-500 hover:bg-sky-600 active:scale-95 flex items-center justify-center text-white font-bold text-sm transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 focus:ring-offset-slate-800">
+                                class="w-9 h-9 rounded-full bg-sky-500 hover:bg-sky-600 active:scale-95 flex items-center justify-center text-white font-bold text-sm transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-2 focus:ring-offset-[#13151c]">
                             {{ request.session.user_email|first|upper|default:"U" }}
                         </button>
 
@@ -87,31 +95,31 @@
                              x-transition:enter="transition ease-out duration-150"
                              x-transition:enter-start="opacity-0 scale-95 -translate-y-1"
                              x-transition:enter-end="opacity-100 scale-100 translate-y-0"
-                             class="absolute right-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-xl shadow-xl shadow-black/40 z-50 overflow-hidden">
+                             class="absolute right-0 mt-2 w-56 bg-[#1a1d27] border border-zinc-700/60 rounded-xl shadow-2xl shadow-black/60 z-50 overflow-hidden">
 
                             <!-- User info header -->
-                            <div class="px-4 py-3 border-b border-slate-700">
-                                <p class="text-xs text-slate-400">Signed in as</p>
-                                <p class="text-sm font-medium text-slate-100 truncate">{{ request.session.user_email|default:"User" }}</p>
+                            <div class="px-4 py-3 border-b border-zinc-700/60">
+                                <p class="text-xs text-zinc-500">Signed in as</p>
+                                <p class="text-sm font-medium text-zinc-100 truncate">{{ request.session.user_email|default:"User" }}</p>
                             </div>
 
                             <!-- Menu items -->
                             <div class="py-1">
                                 <a href="{% url 'drive_home' %}"
-                                   class="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-700 hover:text-slate-100 transition-colors duration-100">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h3.586a1 1 0 01.707.293L10.414 6.5H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
+                                   class="flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-700/50 hover:text-zinc-100 transition-colors duration-100">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h3.586a1 1 0 01.707.293L10.414 6.5H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>
                                     My Drive
                                 </a>
                                 <a href="{% url 'dashboard' %}"
-                                   class="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-700 hover:text-slate-100 transition-colors duration-100">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
+                                   class="flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-700/50 hover:text-zinc-100 transition-colors duration-100">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
                                     Settings
                                 </a>
                             </div>
 
-                            <div class="border-t border-slate-700 py-1">
+                            <div class="border-t border-zinc-700/60 py-1">
                                 <a href="{% url 'signout' %}"
-                                   class="flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-slate-700 hover:text-red-300 transition-colors duration-100">
+                                   class="flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-zinc-700/50 hover:text-red-300 transition-colors duration-100">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
                                     Sign out
                                 </a>
@@ -120,7 +128,7 @@
                     </div>
                     {% endblock nav_extra %}
                 {% else %}
-                    <a href="{% url 'signin' %}" class="text-slate-300 hover:text-sky-400 transition-colors duration-150">Sign in</a>
+                    <a href="{% url 'signin' %}" class="text-zinc-400 hover:text-sky-400 transition-colors duration-150">Sign in</a>
                     <a href="{% url 'signup' %}"
                        class="bg-sky-500 hover:bg-sky-600 active:scale-95 active:bg-sky-700 text-white font-semibold px-4 py-1.5 rounded-lg transition-all duration-150 shadow-sm hover:shadow-sky-500/30 hover:shadow-md">
                         Sign up
@@ -129,13 +137,14 @@
             </div>
         </div>
     </nav>
+    {% endblock navbar %}
 
     <main class="{% block main_class %}flex-1 flex justify-center p-8{% endblock %}">
         {% block content %}{% endblock %}
     </main>
 
-    <footer class="bg-slate-800 border-t border-slate-700 text-center py-4 text-slate-500 text-sm">
-        StrawDrive &mdash; Powered by Django &amp; AWS Lambda
+    <footer class="bg-[#13151c] border-t border-zinc-800 text-center py-4 text-zinc-500 text-sm">
+        NovaDrive &mdash; Powered by Django &amp; AWS Lambda
     </footer>
 
     {% block extra_js %}{% endblock %}

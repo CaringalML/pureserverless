@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
-{% block title %}StrawDrive{% endblock %}
+{% block title %}NovaDrive{% endblock %}
 
-{# Hide the navbar avatar on the drive page — profile lives in the sidebar #}
-{% block nav_extra %}{% endblock %}
+{# Hide the entire navbar on the drive page — branding lives in the sidebar #}
+{% block navbar %}{% endblock %}
 
 {# Full-bleed layout — sidebar + main content side by side #}
 {% block main_class %}flex-1 flex overflow-hidden{% endblock %}
@@ -93,7 +93,7 @@
                 if (!resp.ok) throw new Error(`Failed to get upload URL (HTTP ${resp.status})`);
                 const { url, fields, s3_key, error } = await resp.json();
                 if (error) throw new Error('Server error: ' + error);
-                console.log('[StrawDrive] Uploading to:', url, 'fields:', fields, 's3_key:', s3_key);
+                console.log('[NovaDrive] Uploading to:', url, 'fields:', fields, 's3_key:', s3_key);
 
                 /* Step 2 — XHR directly to S3 with progress events */
                 await new Promise((resolve, reject) => {
@@ -108,12 +108,12 @@
                             this.uploadProgress = Math.round((e.loaded / e.total) * 90);
                     });
                     xhr.addEventListener('load', () => {
-                        console.log('[StrawDrive] S3 response status:', xhr.status, xhr.responseText);
+                        console.log('[NovaDrive] S3 response status:', xhr.status, xhr.responseText);
                         if (xhr.status >= 200 && xhr.status < 300) { this.uploadProgress = 95; resolve(); }
                         else reject(new Error(`S3 rejected upload (HTTP ${xhr.status}): ${xhr.responseText}`));
                     });
                     xhr.addEventListener('error', () => {
-                        console.error('[StrawDrive] XHR network error — likely CORS. Check S3 bucket CORS config.');
+                        console.error('[NovaDrive] XHR network error — likely CORS. Check S3 bucket CORS config.');
                         reject(new Error('Network error uploading to S3 — CORS may not be applied yet. Check browser console.'));
                     });
                     xhr.send(form);
@@ -175,16 +175,31 @@
      }">
 
     {# ═══════════════════ SIDEBAR ═══════════════════ #}
-    <aside class="w-60 shrink-0 bg-slate-800 border-r border-slate-700 flex flex-col overflow-y-auto"
+    <aside class="w-64 shrink-0 bg-[#0f1117] border-r border-zinc-800/80 flex flex-col overflow-y-auto"
            :class="sidebarOpen ? 'flex' : 'hidden md:flex'">
 
-        <div class="p-4 space-y-1">
+        {# ── Brand header ── #}
+        <div class="px-5 py-5 border-b border-zinc-800/80">
+            <a href="{% url 'drive_home' %}" class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-sky-400 to-indigo-500 flex items-center justify-center shrink-0 shadow-lg shadow-sky-500/25">
+                    <svg class="w-4 h-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
+                    </svg>
+                </div>
+                <div>
+                    <p class="text-base font-bold leading-none tracking-tight text-white">Nova<span class="text-sky-400">Drive</span></p>
+                    <p class="text-[10px] text-zinc-500 mt-0.5 tracking-wide uppercase">Cloud Storage</p>
+                </div>
+            </a>
+        </div>
+
+        <div class="p-3 space-y-0.5 flex-1">
 
             {# My Drive (root) #}
             <a href="{% url 'drive_home' %}"
-               class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-colors duration-100
-                      {% if not current_folder and not is_archive_view and not is_recycle_bin %}bg-sky-600 text-white{% else %}text-slate-300 hover:bg-slate-700 hover:text-white{% endif %}">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+               class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-100
+                      {% if not current_folder and not is_archive_view and not is_recycle_bin %}bg-sky-500/15 text-sky-400 border border-sky-500/20{% else %}text-zinc-400 hover:bg-white/5 hover:text-zinc-200{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h3.586a1 1 0 01.707.293L10.414 6.5H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
                 </svg>
                 My Drive
@@ -192,9 +207,9 @@
 
             {# Archive #}
             <a href="{% url 'drive_archive_view' %}"
-               class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-colors duration-100
-                      {% if is_archive_view %}bg-purple-700 text-white{% else %}text-slate-300 hover:bg-slate-700 hover:text-white{% endif %}">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+               class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-100
+                      {% if is_archive_view %}bg-purple-500/15 text-purple-400 border border-purple-500/20{% else %}text-zinc-400 hover:bg-white/5 hover:text-zinc-200{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
                 </svg>
                 Archive
@@ -202,9 +217,9 @@
 
             {# Recycle Bin #}
             <a href="{% url 'drive_bin' %}"
-               class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-colors duration-100
-                      {% if is_recycle_bin %}bg-slate-600 text-white{% else %}text-slate-300 hover:bg-slate-700 hover:text-white{% endif %}">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+               class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors duration-100
+                      {% if is_recycle_bin %}bg-white/8 text-zinc-200 border border-zinc-600/40{% else %}text-zinc-400 hover:bg-white/5 hover:text-zinc-200{% endif %}">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                 </svg>
                 Recycle Bin
@@ -219,18 +234,19 @@
         </div>
 
         {# Profile section #}
-        <div class="mt-auto p-4 border-t border-slate-700"
+        <div class="p-3 border-t border-zinc-800/80"
              x-data="{ open: false }" @click.outside="open = false">
 
             <button @click="open = !open"
-                    class="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-slate-700 transition-colors duration-100 group">
-                <span class="w-8 h-8 rounded-full bg-sky-500 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                    class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-colors duration-100 group">
+                <span class="w-8 h-8 rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-md shadow-sky-500/20">
                     {{ request.session.user_email|first|upper|default:"U" }}
                 </span>
                 <span class="flex-1 min-w-0 text-left">
-                    <span class="block text-sm font-medium text-slate-200 truncate">{{ request.session.user_email|default:"User" }}</span>
+                    <span class="block text-xs font-medium text-zinc-200 truncate">{{ request.session.user_email|default:"User" }}</span>
+                    <span class="block text-[10px] text-zinc-500 mt-0.5">Account</span>
                 </span>
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-transform duration-150 shrink-0"
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-zinc-600 group-hover:text-zinc-400 shrink-0 transition-transform duration-150"
                      :class="open ? '-rotate-180' : ''"
                      fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
@@ -242,15 +258,15 @@
                  x-transition:enter="transition ease-out duration-150"
                  x-transition:enter-start="opacity-0 scale-95 translate-y-1"
                  x-transition:enter-end="opacity-100 scale-100 translate-y-0"
-                 class="mt-2 bg-slate-900 border border-slate-700 rounded-xl shadow-xl shadow-black/40 overflow-hidden">
+                 class="mt-1 bg-[#0d0f14] border border-zinc-800 rounded-xl shadow-2xl shadow-black/60 overflow-hidden">
                 <a href="{% url 'dashboard' %}"
-                   class="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-700 hover:text-slate-100 transition-colors duration-100">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
+                   class="flex items-center gap-3 px-4 py-2.5 text-sm text-zinc-300 hover:bg-white/5 hover:text-zinc-100 transition-colors duration-100">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
                     Settings
                 </a>
-                <div class="border-t border-slate-700">
+                <div class="border-t border-zinc-800">
                     <a href="{% url 'signout' %}"
-                       class="flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-slate-700 hover:text-red-300 transition-colors duration-100">
+                       class="flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-white/5 hover:text-red-300 transition-colors duration-100">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
                         Sign out
                     </a>
@@ -269,15 +285,15 @@
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-purple-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
                 </svg>
-                <h1 class="text-lg font-semibold text-slate-100">Archive</h1>
+                <h1 class="text-lg font-semibold text-zinc-100">Archive</h1>
                 <span class="text-xs text-purple-400 bg-purple-900/30 border border-purple-800 rounded-lg px-2 py-1">Glacier Deep Archive</span>
             </div>
-            <p class="text-sm text-slate-500 mb-4">Files archived to Glacier Deep Archive. Retrieval takes 12–48 hours.</p>
+            <p class="text-sm text-zinc-500 mb-4">Files archived to Glacier Deep Archive. Retrieval takes 12–48 hours.</p>
 
             {# ── Bulk restore toolbar — appears when files are checked in archive view ── #}
             <div x-show="selected.length > 0" x-cloak x-transition
-                 class="bg-slate-800 border border-slate-600 rounded-xl px-5 py-3 mb-5 flex items-center gap-4 flex-wrap">
-                <span class="text-sm text-slate-300" x-text="`${selected.length} file${selected.length > 1 ? 's' : ''} selected`"></span>
+                 class="bg-[#13151c] border border-zinc-600/80 rounded-xl px-5 py-3 mb-5 flex items-center gap-4 flex-wrap">
+                <span class="text-sm text-zinc-300" x-text="`${selected.length} file${selected.length > 1 ? 's' : ''} selected`"></span>
                 <button class="btn-primary text-sm" style="width:auto;padding:7px 16px;background:#7c3aed;" :disabled="archiving"
                         @click="
                             archiving = true;
@@ -297,23 +313,23 @@
                     <span class="spinner" x-show="archiving" x-cloak></span>
                     <span x-text="archiving ? 'Requesting restore\u2026' : 'Restore selected'"></span>
                 </button>
-                <button class="text-slate-400 hover:text-slate-200 text-sm transition" @click="selected = []">Cancel</button>
+                <button class="text-zinc-400 hover:text-zinc-200 text-sm transition" @click="selected = []">Cancel</button>
             </div>
             {% elif is_recycle_bin %}
             <div class="flex items-center gap-3 mb-5">
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                 </svg>
-                <h1 class="text-lg font-semibold text-slate-100">Recycle Bin</h1>
+                <h1 class="text-lg font-semibold text-zinc-100">Recycle Bin</h1>
             </div>
-            <p class="text-sm text-slate-500 mb-5">Files are permanently deleted after 30 days. Restore them to My Drive before then.</p>
+            <p class="text-sm text-zinc-500 mb-5">Files are permanently deleted after 30 days. Restore them to My Drive before then.</p>
             {% else %}
             <nav class="flex items-center gap-1.5 text-sm mb-5 flex-wrap">
                 <a href="{% url 'drive_home' %}" class="text-sky-400 hover:text-sky-300 transition font-medium">My Drive</a>
                 {% for crumb in breadcrumbs %}
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
                 {% if crumb == current_folder %}
-                <span class="text-slate-200 font-medium">{{ crumb.name }}</span>
+                <span class="text-zinc-200 font-medium">{{ crumb.name }}</span>
                 {% else %}
                 <a href="{% url 'drive_folder' crumb.pk %}" class="text-sky-400 hover:text-sky-300 transition">{{ crumb.name }}</a>
                 {% endif %}
@@ -328,7 +344,7 @@
                 {# New folder button / inline input #}
                 <div x-show="!creatingFolder">
                     <button @click="creatingFolder = true; $nextTick(() => $refs.folderInput.focus())"
-                            class="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-600 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-sm font-medium transition-colors duration-150">
+                            class="flex items-center gap-2 px-4 py-2 rounded-lg border border-zinc-600/80 bg-[#13151c] hover:bg-zinc-700/60 text-zinc-300 hover:text-white text-sm font-medium transition-colors duration-150">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m-9-1V7a2 2 0 012-2h3.586a1 1 0 01.707.293L10.414 6.5H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
                         </svg>
@@ -343,13 +359,13 @@
                            @keydown.escape="creatingFolder = false; newFolderName = ''"
                            type="text"
                            placeholder="Folder name"
-                           class="bg-slate-700 border border-slate-500 focus:border-sky-500 rounded-lg px-3 py-2 text-sm text-slate-100 w-44 transition-colors">
+                           class="bg-zinc-700/60 border border-slate-500 focus:border-sky-500 rounded-lg px-3 py-2 text-sm text-zinc-100 w-44 transition-colors">
                     <button @click="submitNewFolder()"
                             class="px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white text-sm rounded-lg font-medium transition-colors">
                         Create
                     </button>
                     <button @click="creatingFolder = false; newFolderName = ''"
-                            class="px-3 py-2 text-slate-400 hover:text-slate-200 text-sm transition-colors">
+                            class="px-3 py-2 text-zinc-400 hover:text-zinc-200 text-sm transition-colors">
                         Cancel
                     </button>
                 </div>
@@ -370,16 +386,16 @@
             {# ── Upload progress bar (hidden on archive view) ── #}
             {% if not is_archive_view %}
             <div x-show="uploading" x-cloak class="mb-5">
-                <div class="flex justify-between text-xs text-slate-400 mb-1.5">
+                <div class="flex justify-between text-xs text-zinc-400 mb-1.5">
                     <span class="truncate max-w-xs" x-text="uploadLabel"></span>
                     <span x-text="`${uploadProgress}%`"></span>
                 </div>
-                <div class="w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+                <div class="w-full bg-zinc-700/60 rounded-full h-2 overflow-hidden">
                     <div class="h-2 rounded-full transition-all duration-200 ease-out"
                          :class="uploadProgress === 100 ? 'bg-green-500' : 'bg-sky-500'"
                          :style="`width: ${uploadProgress}%`"></div>
                 </div>
-                <p class="text-xs text-slate-500 mt-1.5">
+                <p class="text-xs text-zinc-500 mt-1.5">
                     <span x-text="uploadProgress < 95 ? 'Uploading to S3…' : uploadProgress < 100 ? 'Saving…' : 'Done!'"></span>
                 </p>
             </div>
@@ -388,8 +404,8 @@
             {# ── Archive toolbar — appears when files are checked (hidden on archive view) ── #}
             {% if not is_archive_view %}
             <div x-show="selected.length > 0" x-cloak x-transition
-                 class="bg-slate-800 border border-slate-600 rounded-xl px-5 py-3 mb-5 flex items-center gap-4 flex-wrap">
-                <span class="text-sm text-slate-300" x-text="`${selected.length} file${selected.length > 1 ? 's' : ''} selected`"></span>
+                 class="bg-[#13151c] border border-zinc-600/80 rounded-xl px-5 py-3 mb-5 flex items-center gap-4 flex-wrap">
+                <span class="text-sm text-zinc-300" x-text="`${selected.length} file${selected.length > 1 ? 's' : ''} selected`"></span>
                 <span class="text-xs text-purple-400 bg-purple-900/30 border border-purple-800 rounded-lg px-2 py-1">Glacier Deep Archive</span>
                 <button class="btn-primary text-sm" style="width:auto;padding:7px 16px;" :disabled="archiving"
                         @click="
@@ -410,7 +426,7 @@
                     <span class="spinner" x-show="archiving" x-cloak></span>
                     <span x-text="archiving ? 'Archiving…' : 'Archive'"></span>
                 </button>
-                <button class="text-slate-400 hover:text-slate-200 text-sm transition" @click="selected = []">Cancel</button>
+                <button class="text-zinc-400 hover:text-zinc-200 text-sm transition" @click="selected = []">Cancel</button>
             </div>
             {% endif %}{# /not is_archive_view #}
 
@@ -436,30 +452,30 @@
 
             {# ── Empty state ── #}
             {% if is_archive_view and not files %}
-            <div id="empty-state" class="text-center bg-slate-800 border border-slate-700 rounded-xl py-20 mt-2">
+            <div id="empty-state" class="text-center bg-[#13151c] border border-zinc-700/60 rounded-xl py-20 mt-2">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto mb-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
                 </svg>
-                <p class="text-slate-400 text-lg">No archived files</p>
-                <p class="text-slate-500 text-sm mt-1">Files you archive will appear here</p>
+                <p class="text-zinc-400 text-lg">No archived files</p>
+                <p class="text-zinc-500 text-sm mt-1">Files you archive will appear here</p>
             </div>
             {% elif is_recycle_bin and not files %}
-            <div id="empty-state" class="text-center bg-slate-800 border border-slate-700 rounded-xl py-20 mt-2">
+            <div id="empty-state" class="text-center bg-[#13151c] border border-zinc-700/60 rounded-xl py-20 mt-2">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto mb-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                 </svg>
-                <p class="text-slate-400 text-lg">Recycle Bin is empty</p>
-                <p class="text-slate-500 text-sm mt-1">Deleted files will appear here for 30 days</p>
+                <p class="text-zinc-400 text-lg">Recycle Bin is empty</p>
+                <p class="text-zinc-500 text-sm mt-1">Deleted files will appear here for 30 days</p>
             </div>
             {% elif not is_archive_view and not is_recycle_bin and not files and not subfolders %}
-            <div id="empty-state" class="text-center bg-slate-800 border border-slate-700 rounded-xl py-20 mt-2">
+            <div id="empty-state" class="text-center bg-[#13151c] border border-zinc-700/60 rounded-xl py-20 mt-2">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto mb-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h3.586a1 1 0 01.707.293L10.414 6.5H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
                 </svg>
-                <p class="text-slate-400 text-lg">
+                <p class="text-zinc-400 text-lg">
                     {% if current_folder %}{{ current_folder.name }} is empty{% else %}No files yet{% endif %}
                 </p>
-                <p class="text-slate-500 text-sm mt-1">Create a folder or upload a file using the buttons above</p>
+                <p class="text-zinc-500 text-sm mt-1">Create a folder or upload a file using the buttons above</p>
             </div>
             {% endif %}
 
@@ -474,30 +490,30 @@
          style="display:none">
 
         {# Top bar #}
-        <div class="flex items-center justify-between px-5 py-3 bg-slate-900 border-b border-slate-700 shrink-0">
+        <div class="flex items-center justify-between px-5 py-3 bg-[#0d0f14] border-b border-zinc-700/60 shrink-0">
             <div class="flex items-center gap-3 min-w-0">
                 {# File type icon colour #}
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0"
-                     :class="isImage() ? 'text-violet-400' : isPdf() ? 'text-red-400' : isVideo() ? 'text-pink-400' : isAudio() ? 'text-green-400' : 'text-slate-400'"
+                     :class="isImage() ? 'text-violet-400' : isPdf() ? 'text-red-400' : isVideo() ? 'text-pink-400' : isAudio() ? 'text-green-400' : 'text-zinc-400'"
                      fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
                 </svg>
                 <div class="min-w-0">
-                    <p class="text-slate-100 font-medium truncate" x-text="preview?.name"></p>
-                    <p class="text-xs text-slate-500" x-text="preview?.size"></p>
+                    <p class="text-zinc-100 font-medium truncate" x-text="preview?.name"></p>
+                    <p class="text-xs text-zinc-500" x-text="preview?.size"></p>
                 </div>
             </div>
             <div class="flex items-center gap-2 shrink-0 ml-4">
                 {# Download button #}
                 <a :href="`/drive/download/${preview?.pk}/`"
-                   class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-slate-300 hover:text-white bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors duration-150"
+                   class="flex items-center gap-1.5 px-3 py-1.5 text-sm text-zinc-300 hover:text-white bg-zinc-700/60 hover:bg-zinc-600 rounded-lg transition-colors duration-150"
                    title="Download file">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0 0l-4-4m4 4l4-4"/></svg>
                     Download
                 </a>
                 {# Close button #}
                 <button @click="closePreview()"
-                        class="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors duration-150"
+                        class="p-2 text-zinc-400 hover:text-white hover:bg-zinc-700/60 rounded-lg transition-colors duration-150"
                         title="Close (Esc)">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
@@ -510,7 +526,7 @@
             {# Loading spinner #}
             <div x-show="preview?.loading" class="flex flex-col items-center gap-3">
                 <div class="spinner" style="width:32px;height:32px;border-width:3px;"></div>
-                <p class="text-slate-400 text-sm">Loading preview…</p>
+                <p class="text-zinc-400 text-sm">Loading preview…</p>
             </div>
 
             {# Image #}
@@ -540,10 +556,10 @@
             {# Audio #}
             <template x-if="isAudio()">
                 <div class="flex flex-col items-center gap-6 p-8">
-                    <div class="w-24 h-24 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center">
+                    <div class="w-24 h-24 rounded-full bg-[#13151c] border border-zinc-700/60 flex items-center justify-center">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/></svg>
                     </div>
-                    <p class="text-slate-200 font-medium" x-text="preview.name"></p>
+                    <p class="text-zinc-200 font-medium" x-text="preview.name"></p>
                     <audio :src="preview.url" controls class="w-80"></audio>
                 </div>
             </template>
@@ -551,15 +567,15 @@
             {# Other file types — show download prompt #}
             <template x-if="isOther()">
                 <div class="flex flex-col items-center gap-5 p-8 text-center">
-                    <div class="w-20 h-20 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                    <div class="w-20 h-20 rounded-2xl bg-[#13151c] border border-zinc-700/60 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
                     </div>
                     <div>
-                        <p class="text-slate-200 font-semibold text-lg" x-text="preview.name"></p>
-                        <p class="text-slate-500 text-sm mt-1" x-text="preview.size"></p>
-                        <p class="text-slate-500 text-xs mt-0.5" x-text="preview.content_type"></p>
+                        <p class="text-zinc-200 font-semibold text-lg" x-text="preview.name"></p>
+                        <p class="text-zinc-500 text-sm mt-1" x-text="preview.size"></p>
+                        <p class="text-zinc-500 text-xs mt-0.5" x-text="preview.content_type"></p>
                     </div>
-                    <p class="text-slate-400 text-sm">No preview available for this file type.</p>
+                    <p class="text-zinc-400 text-sm">No preview available for this file type.</p>
                     <a :href="preview.url" target="_blank" rel="noopener"
                        class="btn-primary" style="width:auto;padding:10px 24px;">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0 0l-4-4m4 4l4-4"/></svg>

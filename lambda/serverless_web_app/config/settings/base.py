@@ -78,7 +78,7 @@ AWS_REGION = os.environ.get("AWS_REGION", "ap-southeast-2")
 COGNITO_USER_POOL_ID = os.environ.get("COGNITO_USER_POOL_ID", "")
 COGNITO_CLIENT_ID    = os.environ.get("COGNITO_CLIENT_ID", "")
 
-# StrawDrive
+# NovaDrive
 DRIVE_BUCKET_NAME               = os.environ.get("DRIVE_BUCKET_NAME", "")
 CLOUDFRONT_DOMAIN               = os.environ.get("CLOUDFRONT_DOMAIN", "")
 CLOUDFRONT_KEY_PAIR_ID          = os.environ.get("CLOUDFRONT_KEY_PAIR_ID", "")

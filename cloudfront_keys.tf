@@ -23,5 +23,5 @@ resource "aws_cloudfront_public_key" "drive" {
 resource "aws_cloudfront_key_group" "drive" {
   name    = "${var.lambda_function_name}-drive-keygroup-${var.environment}"
   items   = [aws_cloudfront_public_key.drive.id]
-  comment = "StrawDrive signed URL key group"
+  comment = "NovaDrive signed URL key group"
 }

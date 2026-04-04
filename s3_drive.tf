@@ -3,7 +3,7 @@ resource "aws_s3_bucket" "drive" {
 
   tags = {
     Environment = var.environment
-    Purpose     = "strawdrive-file-storage"
+    Purpose     = "novadrive-file-storage"
   }
 }
 

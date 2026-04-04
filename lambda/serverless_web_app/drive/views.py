@@ -494,7 +494,7 @@ def _send_bulk_restore_email(to_email, file_names):
     )
     html_body = f"""
     <div style="font-family:sans-serif;max-width:560px;margin:0 auto;background:#0f172a;padding:32px;border-radius:12px;">
-        <h2 style="color:#f1f5f9;margin-top:0;">StrawDrive — Restore Started</h2>
+        <h2 style="color:#f1f5f9;margin-top:0;">NovaDrive — Restore Started</h2>
         <p style="color:#94a3b8;">
             {count} {noun} are being restored from Glacier Deep Archive:
         </p>
@@ -506,13 +506,13 @@ def _send_bulk_restore_email(to_email, file_names):
             We'll send you another email as soon as your {noun} {"is" if count == 1 else "are"} ready to download.
         </p>
         <hr style="border:none;border-top:1px solid #1e293b;margin:24px 0;">
-        <p style="color:#475569;font-size:12px;margin:0;">StrawDrive &nbsp;·&nbsp; nodepulsecaringal.xyz</p>
+        <p style="color:#475569;font-size:12px;margin:0;">NovaDrive &nbsp;·&nbsp; nodepulsecaringal.xyz</p>
     </div>
     """
     resend.Emails.send({
         "from": settings.DRIVE_FROM_EMAIL,
         "to": [to_email],
-        "subject": f"StrawDrive: Restoring {count} {noun} — we'll notify you when ready",
+        "subject": f"NovaDrive: Restoring {count} {noun} — we'll notify you when ready",
         "html": html_body,
     })
 
@@ -564,7 +564,7 @@ def _send_restore_started_email(to_email, file_name):
     resend.api_key = _get_resend_api_key()
     html_body = f"""
     <div style="font-family:sans-serif;max-width:560px;margin:0 auto;background:#0f172a;padding:32px;border-radius:12px;">
-        <h2 style="color:#f1f5f9;margin-top:0;">StrawDrive — Restore Started</h2>
+        <h2 style="color:#f1f5f9;margin-top:0;">NovaDrive — Restore Started</h2>
         <p style="color:#94a3b8;">Your file is being restored from Glacier Deep Archive:</p>
         <div style="background:#1e293b;border-radius:8px;padding:16px;margin:16px 0;border-left:4px solid #a78bfa;">
             <p style="color:#e2e8f0;margin:0;font-weight:600;">{file_name}</p>
@@ -574,13 +574,13 @@ def _send_restore_started_email(to_email, file_name):
             We'll send you another email as soon as your file is ready to download.
         </p>
         <hr style="border:none;border-top:1px solid #1e293b;margin:24px 0;">
-        <p style="color:#475569;font-size:12px;margin:0;">StrawDrive &nbsp;·&nbsp; nodepulsecaringal.xyz</p>
+        <p style="color:#475569;font-size:12px;margin:0;">NovaDrive &nbsp;·&nbsp; nodepulsecaringal.xyz</p>
     </div>
     """
     resend.Emails.send({
         "from": settings.DRIVE_FROM_EMAIL,
         "to": [to_email],
-        "subject": f'StrawDrive: Restoring "{file_name}" — we\'ll notify you when ready',
+        "subject": f'NovaDrive: Restoring "{file_name}" — we\'ll notify you when ready',
         "html": html_body,
     })
 
@@ -598,7 +598,7 @@ def _send_archive_email(to_email, file_names):
 
     html_body = f"""
     <div style="font-family:sans-serif;max-width:560px;margin:0 auto;background:#0f172a;padding:32px;border-radius:12px;">
-        <h2 style="color:#f1f5f9;margin-top:0;">StrawDrive — Archive Confirmation</h2>
+        <h2 style="color:#f1f5f9;margin-top:0;">NovaDrive — Archive Confirmation</h2>
         <p style="color:#94a3b8;">
             {count} {noun} have been moved to <strong style="color:#a78bfa;">Glacier Deep Archive</strong>.
         </p>
@@ -610,13 +610,13 @@ def _send_archive_email(to_email, file_names):
             you will need to initiate a Glacier restore request (retrieval time: 12–48 hours).
         </p>
         <hr style="border:none;border-top:1px solid #1e293b;margin:24px 0;">
-        <p style="color:#475569;font-size:12px;margin:0;">StrawDrive &nbsp;·&nbsp; nodepulsecaringal.xyz</p>
+        <p style="color:#475569;font-size:12px;margin:0;">NovaDrive &nbsp;·&nbsp; nodepulsecaringal.xyz</p>
     </div>
     """
 
     resend.Emails.send({
         "from": settings.DRIVE_FROM_EMAIL,
         "to": [to_email],
-        "subject": f"StrawDrive: {count} {noun} archived to Glacier Deep Archive",
+        "subject": f"NovaDrive: {count} {noun} archived to Glacier Deep Archive",
         "html": html_body,
     })
