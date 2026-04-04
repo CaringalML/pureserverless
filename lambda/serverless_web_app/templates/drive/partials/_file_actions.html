@@ -1,10 +1,6 @@
-{% if file.is_archived %}
-    {% if file.restore_status == 'ready' %}
-    <a href="{% url 'drive_download' file.pk %}"
-       class="text-xs text-green-400 font-medium px-2 py-1 bg-green-900/30 border border-green-700 rounded-lg hover:bg-green-900/50 transition-colors duration-150 whitespace-nowrap">
-        Ready &mdash; Download
-    </a>
-    {% elif file.restore_status == 'pending' %}
+{% if file.is_archived and file.restore_status != 'ready' %}
+    {# ── Archived, not yet restored ── #}
+    {% if file.restore_status == 'pending' %}
     <span class="text-xs text-sky-400 font-medium px-2 py-1 bg-sky-900/30 border border-sky-800 rounded-lg flex items-center gap-1.5">
         <svg class="animate-spin w-3 h-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
         Restoring&hellip;
@@ -31,11 +27,17 @@
     </div>
     {% endif %}
 {% else %}
-<button @click="openPreview({{ file.pk }})"
-        class="text-zinc-400 hover:text-sky-400 transition-colors duration-150 p-1.5 rounded-lg hover:bg-zinc-700/50"
-        title="Preview">
-    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-</button>
+    {# ── Standard file OR restored archived file — show preview + download ── #}
+    <button @click="openPreview({{ file.pk }})"
+            class="text-zinc-400 hover:text-sky-400 transition-colors duration-150 p-1.5 rounded-lg hover:bg-zinc-700/50"
+            title="Preview">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+    </button>
+    <a href="{% url 'drive_download' file.pk %}"
+       class="text-zinc-400 hover:text-green-400 transition-colors duration-150 p-1.5 rounded-lg hover:bg-zinc-700/50"
+       title="Download">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 12v-8m0 8l-3-3m3 3l3-3"/></svg>
+    </a>
 {% endif %}
 <form method="post" action="{% url 'drive_delete' file.pk %}"
       hx-post="{% url 'drive_delete' file.pk %}"

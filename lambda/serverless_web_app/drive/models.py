@@ -83,6 +83,11 @@ class DriveFile(models.Model):
     def is_archived(self):
         return self.storage_class in (self.GLACIER, self.DEEP_ARCHIVE)
 
+    def storage_class_label(self):
+        if self.is_archived() and self.restore_status == self.RESTORE_READY:
+            return "Restored from Deep Archive"
+        return self.get_storage_class_display()
+
     def is_deleted(self):
         return self.deleted_at is not None
 
