@@ -1,33 +1,39 @@
 {% comment %}
 Recursive VSCode-style collapsible folder tree node.
-Variables: folder, current_folder, depth (default 0)
+Variables passed in: folder, current_folder, breadcrumbs, depth (0-based integer)
 {% endcomment %}
-{% with has_children=folder.subfolders.all %}
-<div x-data="{ open: {{ current_folder.pk|default:0 }} == {{ folder.pk }} or {% for crumb in breadcrumbs %}{{ crumb.pk }} == {{ folder.pk }} or {% endfor %}false }">
+{% with children=folder.subfolders.all %}
+{% with is_active=current_folder.pk|stringformat:"s" in_crumbs=breadcrumbs %}
 
-    {# Row: chevron + icon + name #}
-    <div class="flex items-center rounded-lg transition-colors duration-100 group
+{# Determine if this folder is in the active breadcrumb path #}
+{% with is_open=current_folder.pk %}
+<div x-data="{
+    open: {% for crumb in breadcrumbs %}{{ crumb.pk }} === {{ folder.pk }} || {% endfor %}{{ current_folder.pk|default:0 }} === {{ folder.pk }}
+}">
+
+    {# Row #}
+    <div class="flex items-center rounded-lg transition-colors duration-100
                 {% if current_folder.pk == folder.pk %}bg-slate-600 text-white{% else %}text-slate-400 hover:bg-slate-700 hover:text-white{% endif %}"
-         style="padding-left: {{ depth|default:0 }}rem;">
+         style="padding-left: calc(0.75rem + {{ depth|default:0 }} * 0.875rem);">
 
-        {# Chevron toggle — only shown if folder has children #}
-        {% if has_children %}
-        <button @click.prevent="open = !open"
-                class="shrink-0 w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-300 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 transition-transform duration-150"
+        {# Chevron — only if has children, else spacer #}
+        {% if children.count %}
+        <button type="button" @click.prevent="open = !open"
+                class="shrink-0 w-4 h-4 flex items-center justify-center text-slate-500 hover:text-slate-300 mr-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-2.5 h-2.5 transition-transform duration-150"
                  :class="open ? 'rotate-90' : ''"
-                 fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                 fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
             </svg>
         </button>
         {% else %}
-        <span class="shrink-0 w-5 h-5"></span>
+        <span class="shrink-0 w-4 h-4 mr-1"></span>
         {% endif %}
 
-        {# Folder icon + name — clicking navigates #}
+        {# Folder icon + name #}
         <a href="{% url 'drive_folder' folder.pk %}"
-           class="flex items-center gap-2 flex-1 min-w-0 py-1.5 pr-2 text-sm">
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 {% if depth == 0 %}text-yellow-400{% else %}text-yellow-300{% endif %}"
+           class="flex items-center gap-1.5 flex-1 min-w-0 py-1.5 pr-2 text-sm">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 shrink-0 text-yellow-400"
                  fill="currentColor" viewBox="0 0 24 24">
                 <path d="M10.414 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-6.586L10.414 3z"/>
             </svg>
@@ -35,11 +41,11 @@ Variables: folder, current_folder, depth (default 0)
         </a>
     </div>
 
-    {# Children — shown when open #}
-    {% if has_children %}
-    <div x-show="open" x-cloak>
+    {# Children — only rendered when folder actually has children #}
+    {% if children.count %}
+    <div x-show="open" style="display:none">
         {% with next_depth=depth|add:1 %}
-        {% for child in has_children %}
+        {% for child in children %}
             {% with folder=child depth=next_depth %}
                 {% include "drive/partials/sidebar_folder.html" %}
             {% endwith %}
@@ -49,4 +55,6 @@ Variables: folder, current_folder, depth (default 0)
     {% endif %}
 
 </div>
+{% endwith %}
+{% endwith %}
 {% endwith %}
