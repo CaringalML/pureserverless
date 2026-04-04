@@ -8,29 +8,27 @@
 {% block main_class %}flex-1 flex overflow-hidden{% endblock %}
 
 {% block content %}
-{# ── Alpine scope covers the entire page ────────────────────────────────── #}
-<div class="flex flex-1 overflow-hidden"
-     :data-view="view"
-     x-data="{
-        /* ── upload ── */
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('driveApp', () => ({
         uploading: false,
         uploadProgress: 0,
         uploadLabel: '',
-
-        /* ── new-folder inline input ── */
         creatingFolder: false,
         newFolderName: '',
-
-        /* ── + dropdown ── */
         addNewOpen: false,
-
-        /* ── selection ── */
         selected: [],
         archiving: false,
-
-        /* ── sidebar stats (reactive) ── */
         storageUsed: '{{ storage_used|default:"" }}',
+        sidebarOpen: true,
+        view: localStorage.getItem('nd_view') || 'list',
+        preview: null,
+        ctx: { show: false, x: 0, y: 0, pk: null, archived: false, restoreStatus: '', name: '' },
 
+        csrf() {
+            return document.querySelector('meta[name=csrf-token]').content;
+        },
+        setView(v) { this.view = v; localStorage.setItem('nd_view', v); },
 
         rowClick(e, pk) {
             if (e.ctrlKey || e.metaKey) {
@@ -43,56 +41,6 @@
             const pks = [...document.querySelectorAll('[data-file-pk]')].map(el => parseInt(el.dataset.filePk));
             this.selected = pks.length === this.selected.length ? [] : pks;
         },
-
-        /* ── context menu ── */
-        ctx: { show: false, x: 0, y: 0, pk: null, archived: false, restoreStatus: '', name: '', downloadUrl: '' },
-        openCtx(e, pk, archived, restoreStatus, name) {
-            e.preventDefault();
-            this.ctx = { show: true, x: e.clientX, y: e.clientY, pk, archived, restoreStatus, name };
-        },
-        closeCtx() { this.ctx.show = false; },
-
-        /* ── sidebar collapse (mobile) ── */
-        sidebarOpen: true,
-
-        /* ── view format: list | grid ── */
-        view: localStorage.getItem('nd_view') || 'list',
-        setView(v) { this.view = v; localStorage.setItem('nd_view', v); },
-
-        /* ── file preview modal ── */
-        preview: null,
-
-        async openPreview(pk) {
-            this.preview = { loading: true, name: '', url: '', content_type: '', size: '', pk: pk };
-            try {
-                const resp = await fetch(`/drive/view/${pk}/url/`, {
-                    headers: { 'X-CSRFToken': this.csrf() },
-                });
-                const data = await resp.json();
-                if (data.error) {
-                    alert(data.message || data.error);
-                    this.preview = null;
-                    return;
-                }
-                this.preview = { ...data, loading: false, pk: pk };
-            } catch (err) {
-                alert('Could not load preview: ' + err.message);
-                this.preview = null;
-            }
-        },
-
-        closePreview() { this.preview = null; },
-
-        isImage()  { return this.preview?.content_type?.startsWith('image/'); },
-        isPdf()    { return this.preview?.content_type === 'application/pdf'; },
-        isVideo()  { return this.preview?.content_type?.startsWith('video/'); },
-        isAudio()  { return this.preview?.content_type?.startsWith('audio/'); },
-        isOther()  { return !this.preview?.loading && !this.isImage() && !this.isPdf() && !this.isVideo() && !this.isAudio(); },
-
-        csrf() {
-            return document.querySelector('meta[name=csrf-token]').content;
-        },
-
         toggleSelect(id) {
             if (this.selected.includes(id)) {
                 this.selected = this.selected.filter(x => x !== id);
@@ -101,6 +49,31 @@
             }
         },
         isSelected(id) { return this.selected.includes(id); },
+
+        openCtx(e, pk, archived, restoreStatus, name) {
+            e.preventDefault();
+            this.ctx = { show: true, x: e.clientX, y: e.clientY, pk, archived, restoreStatus, name };
+        },
+        closeCtx() { this.ctx.show = false; },
+
+        async openPreview(pk) {
+            this.preview = { loading: true, name: '', url: '', content_type: '', size: '', pk };
+            try {
+                const resp = await fetch(`/drive/view/${pk}/url/`, { headers: { 'X-CSRFToken': this.csrf() } });
+                const data = await resp.json();
+                if (data.error) { alert(data.message || data.error); this.preview = null; return; }
+                this.preview = { ...data, loading: false, pk };
+            } catch (err) {
+                alert('Could not load preview: ' + err.message);
+                this.preview = null;
+            }
+        },
+        closePreview() { this.preview = null; },
+        isImage()  { return this.preview?.content_type?.startsWith('image/'); },
+        isPdf()    { return this.preview?.content_type === 'application/pdf'; },
+        isVideo()  { return this.preview?.content_type?.startsWith('video/'); },
+        isAudio()  { return this.preview?.content_type?.startsWith('audio/'); },
+        isOther()  { return !this.preview?.loading && !this.isImage() && !this.isPdf() && !this.isVideo() && !this.isAudio(); },
 
         async handleUpload(event) {
             const files = Array.from(event.target.files);
@@ -116,20 +89,15 @@
                 this.uploadLabel    = files.length > 1 ? `${file.name} (${done + 1}/${files.length})` : file.name;
                 this.uploadProgress = 0;
                 try {
-                    /* Step 1 — get presigned POST fields */
                     const resp = await fetch('{% url "drive_upload_url" %}', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
-                        body: JSON.stringify({
-                            filename: file.name,
-                            content_type: file.type || 'application/octet-stream',
-                        }),
+                        body: JSON.stringify({ filename: file.name, content_type: file.type || 'application/octet-stream' }),
                     });
                     if (!resp.ok) throw new Error(`Failed to get upload URL (HTTP ${resp.status})`);
                     const { url, fields, s3_key, error } = await resp.json();
                     if (error) throw new Error('Server error: ' + error);
 
-                    /* Step 2 — XHR to S3 with progress */
                     await new Promise((resolve, reject) => {
                         const form = new FormData();
                         Object.entries(fields).forEach(([k, v]) => form.append(k, v));
@@ -148,7 +116,6 @@
                         xhr.send(form);
                     });
 
-                    /* Step 3 — confirm with server */
                     const confirmResp = await fetch('{% url "drive_confirm" %}', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
@@ -161,7 +128,6 @@
                     });
                     const result = await confirmResp.json();
                     this.uploadProgress = 100;
-
                     if (result.html) {
                         const list = document.getElementById('file-list');
                         list.insertAdjacentHTML('afterbegin', result.html);
@@ -176,9 +142,9 @@
                 await new Promise(r => setTimeout(r, 200));
             }
             await new Promise(r => setTimeout(r, 400));
-            this.uploading      = false;
+            this.uploading = false;
             this.uploadProgress = 0;
-            this.uploadLabel    = '';
+            this.uploadLabel = '';
         },
 
         async submitNewFolder() {
@@ -188,10 +154,7 @@
                 const resp = await fetch('{% url "drive_create_folder" %}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
-                    body: JSON.stringify({
-                        name,
-                        parent_pk: {{ current_folder.pk|default:'null' }},
-                    }),
+                    body: JSON.stringify({ name, parent_pk: {{ current_folder.pk|default:'null' }} }),
                 });
                 const data = await resp.json();
                 if (data.error) { alert(data.error); return; }
@@ -203,8 +166,15 @@
             } catch (err) {
                 alert('Could not create folder: ' + err.message);
             }
-        }
-     }">
+        },
+    }));
+});
+</script>
+
+{# ── Alpine scope covers the entire page ────────────────────────────────── #}
+<div class="flex flex-1 overflow-hidden"
+     :data-view="view"
+     x-data="driveApp()">
 
     {# ═══════════════════ SIDEBAR ═══════════════════ #}
     <aside class="w-64 shrink-0 bg-[#0f1117] border-r border-zinc-800/80 flex flex-col overflow-y-auto"
