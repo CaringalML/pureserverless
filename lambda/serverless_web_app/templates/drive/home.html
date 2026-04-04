@@ -147,6 +147,121 @@ document.addEventListener('alpine:init', () => {
             this.uploadLabel = '';
         },
 
+        async uploadFolder(event) {
+            const files = Array.from(event.target.files);
+            event.target.value = '';
+            if (!files.length) return;
+
+            this.uploading = true;
+            this.uploadLabel = 'Creating folders…';
+            this.uploadProgress = 0;
+
+            // folderPkMap: relative path string → db pk
+            // e.g. "myFolder" → 5, "myFolder/sub" → 7
+            const folderPkMap = {};
+            const rootParentPk = {{ current_folder.pk|default:'null' }};
+
+            try {
+                // Collect all unique folder paths, sorted shallow → deep
+                const folderPaths = new Set();
+                for (const file of files) {
+                    const parts = file.webkitRelativePath.split('/');
+                    for (let i = 1; i < parts.length; i++) {
+                        folderPaths.add(parts.slice(0, i).join('/'));
+                    }
+                }
+                const sortedPaths = [...folderPaths].sort(
+                    (a, b) => a.split('/').length - b.split('/').length
+                );
+
+                // Create each folder, reusing existing ones via get_or_create
+                for (const path of sortedPaths) {
+                    const parts  = path.split('/');
+                    const name   = parts[parts.length - 1];
+                    const parentPath = parts.slice(0, -1).join('/');
+                    const parentPk   = parentPath ? folderPkMap[parentPath] : rootParentPk;
+
+                    const resp = await fetch('{% url "drive_create_folder" %}', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
+                        body: JSON.stringify({ name, parent_pk: parentPk }),
+                    });
+                    const data = await resp.json();
+                    if (data.error) throw new Error(`Could not create folder "${name}": ${data.error}`);
+                    folderPkMap[path] = data.id;
+
+                    // Only inject top-level folder into the visible list
+                    if (parts.length === 1 && data.html) {
+                        const list = document.getElementById('folder-list');
+                        if (list) list.insertAdjacentHTML('afterbegin', data.html);
+                        document.getElementById('empty-state')?.remove();
+                    }
+                }
+
+                // Upload every file into its correct folder
+                let done = 0;
+                for (const file of files) {
+                    const parts          = file.webkitRelativePath.split('/');
+                    const fileFolderPath = parts.slice(0, -1).join('/');
+                    const folderPk       = fileFolderPath ? folderPkMap[fileFolderPath] : rootParentPk;
+
+                    this.uploadLabel    = `${file.name} (${done + 1}/${files.length})`;
+                    this.uploadProgress = 0;
+
+                    try {
+                        const resp = await fetch('{% url "drive_upload_url" %}', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
+                            body: JSON.stringify({ filename: file.name, content_type: file.type || 'application/octet-stream' }),
+                        });
+                        if (!resp.ok) throw new Error(`Failed to get upload URL (HTTP ${resp.status})`);
+                        const { url, fields, s3_key, error } = await resp.json();
+                        if (error) throw new Error('Server error: ' + error);
+
+                        await new Promise((resolve, reject) => {
+                            const form = new FormData();
+                            Object.entries(fields).forEach(([k, v]) => form.append(k, v));
+                            form.append('file', file);
+                            const xhr = new XMLHttpRequest();
+                            xhr.open('POST', url);
+                            xhr.upload.addEventListener('progress', (e) => {
+                                if (e.lengthComputable)
+                                    this.uploadProgress = Math.round((e.loaded / e.total) * 90);
+                            });
+                            xhr.addEventListener('load', () => {
+                                if (xhr.status >= 200 && xhr.status < 300) { this.uploadProgress = 95; resolve(); }
+                                else reject(new Error(`S3 upload failed (HTTP ${xhr.status})`));
+                            });
+                            xhr.addEventListener('error', () => reject(new Error('Network error uploading to S3.')));
+                            xhr.send(form);
+                        });
+
+                        const confirmResp = await fetch('{% url "drive_confirm" %}', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
+                            body: JSON.stringify({ filename: file.name, s3_key, folder_pk: folderPk, storage_class: 'GLACIER_IR' }),
+                        });
+                        const result = await confirmResp.json();
+                        this.uploadProgress = 100;
+                        if (result.storage_used) this.storageUsed = result.storage_used;
+
+                    } catch (err) {
+                        alert(`Upload failed for "${file.name}": ${err.message}`);
+                    }
+                    done++;
+                    await new Promise(r => setTimeout(r, 100));
+                }
+
+            } catch (err) {
+                alert(err.message);
+            } finally {
+                await new Promise(r => setTimeout(r, 400));
+                this.uploading      = false;
+                this.uploadProgress = 0;
+                this.uploadLabel    = '';
+            }
+        },
+
         async submitNewFolder() {
             const name = this.newFolderName.trim();
             if (!name) return;
@@ -455,7 +570,7 @@ document.addEventListener('alpine:init', () => {
                             </svg>
                             Upload folder
                             <input type="file" webkitdirectory multiple class="hidden" :disabled="uploading"
-                                   @change="addNewOpen = false; handleUpload($event)">
+                                   @change="addNewOpen = false; uploadFolder($event)">
                         </label>
                     </div>
                 </div>
