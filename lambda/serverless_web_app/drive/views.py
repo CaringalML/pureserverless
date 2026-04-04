@@ -293,7 +293,7 @@ def confirm_upload(request):
 def download_file(request, pk):
     """Redirect to a presigned S3 GET URL with Content-Disposition: attachment."""
     file = get_object_or_404(DriveFile, pk=pk, owner_sub=_get_owner_sub(request))
-    if file.is_archived():
+    if file.is_archived() and file.restore_status != DriveFile.RESTORE_READY:
         return HttpResponse("This file is archived and cannot be downloaded directly.", status=400)
 
     presigned_url = _s3().generate_presigned_url(
