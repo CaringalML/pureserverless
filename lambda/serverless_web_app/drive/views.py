@@ -304,7 +304,8 @@ def confirm_upload(request):
         )
 
         html = render(request, "drive/partials/file_row.html", {"file": drive_file}).content.decode()
-        return JsonResponse({"html": html, "id": drive_file.id})
+        _, storage_used, _ = _storage_stats(owner_sub)
+        return JsonResponse({"html": html, "id": drive_file.id, "storage_used": storage_used})
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 

@@ -25,6 +25,9 @@
         selected: [],
         archiving: false,
 
+        /* ── sidebar stats (reactive) ── */
+        storageUsed: '{{ storage_used|default:"" }}',
+
 
         rowClick(e, pk) {
             if (e.ctrlKey || e.metaKey) {
@@ -162,6 +165,9 @@
                     list.insertAdjacentHTML('afterbegin', result.html);
                     document.getElementById('empty-state')?.remove();
                 }
+                if (result.storage_used) {
+                    this.storageUsed = result.storage_used;
+                }
 
             } catch (err) {
                 alert(err.message);
@@ -271,12 +277,10 @@
                 <button class="text-[11px] text-zinc-500 hover:text-zinc-300 transition"
                         @click="selected = []">Clear</button>
             </div>
-            {% if storage_used %}
-            <div class="flex items-center justify-between pt-0.5 border-t border-zinc-800/60 mt-1">
+            <div x-show="storageUsed" class="flex items-center justify-between pt-0.5 border-t border-zinc-800/60 mt-1">
                 <span class="text-[11px] text-zinc-500 font-medium uppercase tracking-wide">Storage used</span>
-                <span class="text-[11px] text-zinc-400 font-medium">{{ storage_used }}</span>
+                <span class="text-[11px] text-zinc-400 font-medium" x-text="storageUsed"></span>
             </div>
-            {% endif %}
         </div>
 
         {# Profile section #}
