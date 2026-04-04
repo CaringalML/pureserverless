@@ -121,19 +121,23 @@ def drive_home(request, folder_pk=None):
         files = files.filter(name__icontains=q)
         subfolders = subfolders.filter(name__icontains=q)
 
-    # Sidebar: top-level folders with one level of children pre-fetched
-    sidebar_folders = DriveFolder.objects.filter(
-        owner_sub=owner_sub, parent=None
-    ).prefetch_related('subfolders', 'subfolders__subfolders', 'subfolders__subfolders__subfolders')
-
-    return render(request, "drive/home.html", {
+    ctx = {
         "files": files,
         "subfolders": subfolders,
         "current_folder": current_folder,
         "breadcrumbs": breadcrumbs,
-        "sidebar_folders": sidebar_folders,
         "search_query": q,
-    })
+    }
+
+    if request.headers.get("HX-Request"):
+        return render(request, "drive/partials/search_results.html", ctx)
+
+    # Sidebar: top-level folders with one level of children pre-fetched
+    ctx["sidebar_folders"] = DriveFolder.objects.filter(
+        owner_sub=owner_sub, parent=None
+    ).prefetch_related('subfolders', 'subfolders__subfolders', 'subfolders__subfolders__subfolders')
+
+    return render(request, "drive/home.html", ctx)
 
 
 @cognito_login_required
@@ -367,19 +371,23 @@ def recycle_bin(request):
     if q:
         bin_files = bin_files.filter(name__icontains=q)
 
-    sidebar_folders = DriveFolder.objects.filter(
-        owner_sub=owner_sub, parent=None
-    ).prefetch_related('subfolders', 'subfolders__subfolders', 'subfolders__subfolders__subfolders')
-
-    return render(request, "drive/home.html", {
+    ctx = {
         "files": bin_files,
         "subfolders": [],
         "current_folder": None,
         "breadcrumbs": [],
-        "sidebar_folders": sidebar_folders,
         "is_recycle_bin": True,
         "search_query": q,
-    })
+    }
+
+    if request.headers.get("HX-Request"):
+        return render(request, "drive/partials/search_results.html", ctx)
+
+    ctx["sidebar_folders"] = DriveFolder.objects.filter(
+        owner_sub=owner_sub, parent=None
+    ).prefetch_related('subfolders', 'subfolders__subfolders', 'subfolders__subfolders__subfolders')
+
+    return render(request, "drive/home.html", ctx)
 
 
 @cognito_login_required
@@ -437,19 +445,23 @@ def archive_view(request):
     if q:
         archived_files = archived_files.filter(name__icontains=q)
 
-    sidebar_folders = DriveFolder.objects.filter(
-        owner_sub=owner_sub, parent=None
-    ).prefetch_related('subfolders', 'subfolders__subfolders', 'subfolders__subfolders__subfolders')
-
-    return render(request, "drive/home.html", {
+    ctx = {
         "files": archived_files,
         "subfolders": [],
         "current_folder": None,
         "breadcrumbs": [],
-        "sidebar_folders": sidebar_folders,
         "is_archive_view": True,
         "search_query": q,
-    })
+    }
+
+    if request.headers.get("HX-Request"):
+        return render(request, "drive/partials/search_results.html", ctx)
+
+    ctx["sidebar_folders"] = DriveFolder.objects.filter(
+        owner_sub=owner_sub, parent=None
+    ).prefetch_related('subfolders', 'subfolders__subfolders', 'subfolders__subfolders__subfolders')
+
+    return render(request, "drive/home.html", ctx)
 
 
 @cognito_login_required
