@@ -244,7 +244,6 @@
                 <div class="h-1.5 rounded-full {% if storage_pct > 85 %}bg-red-500{% elif storage_pct > 60 %}bg-yellow-500{% else %}bg-gradient-to-r from-sky-500 to-indigo-500{% endif %}"
                      style="width: {{ storage_pct }}%; min-width: {% if storage_pct > 0 %}4px{% else %}0{% endif %}"></div>
             </div>
-            <p class="text-[10px] text-zinc-600 mt-1">{{ storage_pct }}% of 15 GB</p>
         </div>
         {% endif %}
 
