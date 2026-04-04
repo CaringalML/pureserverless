@@ -4,6 +4,7 @@ import logging
 import os
 import uuid
 from urllib.parse import quote
+from django.db.models import Sum
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,28 @@ def _build_breadcrumbs(folder):
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_STORAGE_CAP_BYTES = 15 * 1024 ** 3  # 15 GB display cap for the bar
+
+def _storage_stats(owner_sub):
+    """Return (used_bytes, used_display, pct) for all non-deleted files owned by owner_sub."""
+    result = DriveFile.objects.filter(
+        owner_sub=owner_sub, deleted_at__isnull=True
+    ).aggregate(total=Sum('size'))
+    raw = result['total'] or 0
+    pct = min(100, round(raw / _STORAGE_CAP_BYTES * 100, 1))
+    total = float(raw)
+    for unit in ('B', 'KB', 'MB', 'GB', 'TB'):
+        if total < 1024:
+            display = f"{total:.1f} {unit}"
+            return raw, display, pct
+        total /= 1024
+    return raw, f"{total:.1f} PB", pct
+
+
+# ---------------------------------------------------------------------------
 # Views
 # ---------------------------------------------------------------------------
 
@@ -132,10 +155,10 @@ def drive_home(request, folder_pk=None):
     if request.headers.get("HX-Request"):
         return render(request, "drive/partials/search_results.html", ctx)
 
-    # Sidebar: top-level folders with one level of children pre-fetched
     ctx["sidebar_folders"] = DriveFolder.objects.filter(
         owner_sub=owner_sub, parent=None
     ).prefetch_related('subfolders', 'subfolders__subfolders', 'subfolders__subfolders__subfolders')
+    _, ctx["storage_used"], ctx["storage_pct"] = _storage_stats(owner_sub)
 
     return render(request, "drive/home.html", ctx)
 
@@ -386,6 +409,7 @@ def recycle_bin(request):
     ctx["sidebar_folders"] = DriveFolder.objects.filter(
         owner_sub=owner_sub, parent=None
     ).prefetch_related('subfolders', 'subfolders__subfolders', 'subfolders__subfolders__subfolders')
+    _, ctx["storage_used"], ctx["storage_pct"] = _storage_stats(owner_sub)
 
     return render(request, "drive/home.html", ctx)
 
@@ -460,6 +484,7 @@ def archive_view(request):
     ctx["sidebar_folders"] = DriveFolder.objects.filter(
         owner_sub=owner_sub, parent=None
     ).prefetch_related('subfolders', 'subfolders__subfolders', 'subfolders__subfolders__subfolders')
+    _, ctx["storage_used"], ctx["storage_pct"] = _storage_stats(owner_sub)
 
     return render(request, "drive/home.html", ctx)
 
