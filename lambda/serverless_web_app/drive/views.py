@@ -104,6 +104,8 @@ def drive_home(request, folder_pk=None):
         breadcrumbs = _build_breadcrumbs(current_folder)
 
     from django.db.models import Q
+    q = request.GET.get("q", "").strip()
+
     files = DriveFile.objects.filter(
         owner_sub=owner_sub,
         folder=current_folder,
@@ -114,6 +116,10 @@ def drive_home(request, folder_pk=None):
         | Q(storage_class__in=(DriveFile.GLACIER, DriveFile.DEEP_ARCHIVE), restore_status=DriveFile.RESTORE_READY)
     )
     subfolders = DriveFolder.objects.filter(owner_sub=owner_sub, parent=current_folder)
+
+    if q:
+        files = files.filter(name__icontains=q)
+        subfolders = subfolders.filter(name__icontains=q)
 
     # Sidebar: top-level folders with one level of children pre-fetched
     sidebar_folders = DriveFolder.objects.filter(
@@ -126,6 +132,7 @@ def drive_home(request, folder_pk=None):
         "current_folder": current_folder,
         "breadcrumbs": breadcrumbs,
         "sidebar_folders": sidebar_folders,
+        "search_query": q,
     })
 
 
@@ -355,7 +362,10 @@ def recycle_bin(request):
             pass
     expired.delete()
 
+    q = request.GET.get("q", "").strip()
     bin_files = DriveFile.objects.filter(owner_sub=owner_sub, deleted_at__isnull=False)
+    if q:
+        bin_files = bin_files.filter(name__icontains=q)
 
     sidebar_folders = DriveFolder.objects.filter(
         owner_sub=owner_sub, parent=None
@@ -368,6 +378,7 @@ def recycle_bin(request):
         "breadcrumbs": [],
         "sidebar_folders": sidebar_folders,
         "is_recycle_bin": True,
+        "search_query": q,
     })
 
 
@@ -416,11 +427,16 @@ def archive_files(request):
 def archive_view(request):
     """Show all archived files (Deep Archive / Glacier) across all folders."""
     owner_sub = _get_owner_sub(request)
+    q = request.GET.get("q", "").strip()
+
     archived_files = DriveFile.objects.filter(
         owner_sub=owner_sub,
         storage_class__in=(DriveFile.GLACIER, DriveFile.DEEP_ARCHIVE),
         deleted_at__isnull=True,
     )
+    if q:
+        archived_files = archived_files.filter(name__icontains=q)
+
     sidebar_folders = DriveFolder.objects.filter(
         owner_sub=owner_sub, parent=None
     ).prefetch_related('subfolders', 'subfolders__subfolders', 'subfolders__subfolders__subfolders')
@@ -432,6 +448,7 @@ def archive_view(request):
         "breadcrumbs": [],
         "sidebar_folders": sidebar_folders,
         "is_archive_view": True,
+        "search_query": q,
     })
 
 
