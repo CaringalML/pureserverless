@@ -75,8 +75,7 @@
             <a href="{% url 'drive_home' %}" class="text-sky-400 font-bold text-lg tracking-wide hover:text-sky-300 transition">StrawDrive</a>
             <div class="flex items-center gap-4 text-sm">
                 {% if request.session.access_token %}
-                    <a href="{% url 'drive_home' %}" class="text-slate-300 hover:text-sky-400 transition-colors duration-150">Drive</a>
-
+                    {% block nav_extra %}
                     <!-- Avatar dropdown -->
                     <div class="relative" x-data="{ open: false }" @click.outside="open = false">
                         <button @click="open = !open"
@@ -119,6 +118,7 @@
                             </div>
                         </div>
                     </div>
+                    {% endblock nav_extra %}
                 {% else %}
                     <a href="{% url 'signin' %}" class="text-slate-300 hover:text-sky-400 transition-colors duration-150">Sign in</a>
                     <a href="{% url 'signup' %}"
