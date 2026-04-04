@@ -12,6 +12,7 @@ urlpatterns = [
     path("view/<int:pk>/url/",            views.get_file_url,   name="drive_file_url"),
     path("view/<int:pk>/",               views.view_file,      name="drive_view"),
     path("delete/<int:pk>/",             views.delete_file,    name="drive_delete"),
+    path("bulk-delete/",                 views.bulk_delete,    name="drive_bulk_delete"),
     path("archive/",                      views.archive_files,  name="drive_archive"),
     path("archive/view/",                 views.archive_view,   name="drive_archive_view"),
     path("restore/<int:pk>/",             views.restore_file,       name="drive_restore"),

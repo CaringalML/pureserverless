@@ -519,18 +519,16 @@
             Preview
         </button>
 
-        {# Download — standard or restored; handles multi-select #}
+        {# Download — standard or restored; handles multi-select via hidden iframes #}
         <button x-show="!ctx.archived || ctx.restoreStatus === 'ready'"
                 @click="
                     const ids = selected.length > 1 ? selected : [ctx.pk];
-                    ids.forEach((id, i) => {
-                        setTimeout(() => {
-                            const a = document.createElement('a');
-                            a.href = '/drive/download/' + id + '/';
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                        }, i * 400);
+                    ids.forEach(id => {
+                        const iframe = document.createElement('iframe');
+                        iframe.style.display = 'none';
+                        iframe.src = '/drive/download/' + id + '/';
+                        document.body.appendChild(iframe);
+                        setTimeout(() => iframe.remove(), 10000);
                     });
                     closeCtx();
                 "
@@ -587,17 +585,32 @@
 
         <div class="border-t border-zinc-700/60 mt-1 pt-1">
             <button @click="
-                        if(confirm(`Delete ${ctx.name}?`)) {
-                            htmx.ajax('POST', `/drive/delete/${ctx.pk}/`, {
-                                target: `#file-${ctx.pk}`, swap: 'outerHTML',
-                                headers: {'X-CSRFToken': csrf()}
-                            });
+                        const ids = selected.length > 1 ? selected : [ctx.pk];
+                        const label = ids.length > 1 ? `${ids.length} files` : ctx.name;
+                        if(confirm(`Move ${label} to Recycle Bin?`)) {
+                            if(ids.length === 1) {
+                                htmx.ajax('POST', `/drive/delete/${ids[0]}/`, {
+                                    target: `#file-${ids[0]}`, swap: 'outerHTML',
+                                    headers: {'X-CSRFToken': csrf()}
+                                });
+                            } else {
+                                fetch('{% url 'drive_bulk_delete' %}', {
+                                    method: 'POST',
+                                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
+                                    body: JSON.stringify({ ids })
+                                }).then(r => r.json()).then(data => {
+                                    data.deleted?.forEach(id => {
+                                        document.getElementById('file-' + id)?.remove();
+                                    });
+                                    selected = [];
+                                }).catch(err => alert('Delete failed: ' + err.message));
+                            }
                         }
                         closeCtx();
                     "
                     class="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-400 hover:bg-white/5 hover:text-red-300 transition-colors">
                 <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                Delete
+                <span x-text="selected.length > 1 ? `Delete (${selected.length})` : 'Delete'"></span>
             </button>
         </div>
     </div>

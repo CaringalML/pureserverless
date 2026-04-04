@@ -372,6 +372,26 @@ def delete_file(request, pk):
 
 @cognito_login_required
 @require_POST
+def bulk_delete(request):
+    """Soft-delete multiple files at once."""
+    try:
+        data = json.loads(request.body)
+        file_ids = data.get("ids", [])
+        owner_sub = _get_owner_sub(request)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        deleted_ids = list(
+            DriveFile.objects.filter(
+                id__in=file_ids, owner_sub=owner_sub, deleted_at__isnull=True
+            ).values_list("id", flat=True)
+        )
+        DriveFile.objects.filter(id__in=deleted_ids).update(deleted_at=now)
+        return JsonResponse({"deleted": deleted_ids})
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@cognito_login_required
+@require_POST
 def restore_from_bin(request, pk):
     """Restore a file from the Recycle Bin back to My Drive."""
     file = get_object_or_404(DriveFile, pk=pk, owner_sub=_get_owner_sub(request), deleted_at__isnull=False)
