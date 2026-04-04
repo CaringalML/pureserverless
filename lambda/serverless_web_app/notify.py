@@ -70,7 +70,8 @@ def _handle_restore_completed(s3_key):
                     return
 
                 cur.execute(
-                    "UPDATE drive_drivefile SET restore_status = 'ready' WHERE id = %s",
+                    "UPDATE drive_drivefile SET restore_status = 'ready', "
+                    "restore_expires_at = NOW() + INTERVAL '7 days' WHERE id = %s",
                     (file_id,),
                 )
     finally:

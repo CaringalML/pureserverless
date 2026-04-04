@@ -127,6 +127,16 @@ def drive_home(request, folder_pk=None):
         breadcrumbs = _build_breadcrumbs(current_folder)
 
     from django.db.models import Q
+    now = datetime.datetime.now(datetime.timezone.utc)
+
+    # Expire any restored files whose 7-day window has passed — reset back to archived
+    DriveFile.objects.filter(
+        owner_sub=owner_sub,
+        restore_status=DriveFile.RESTORE_READY,
+        restore_expires_at__isnull=False,
+        restore_expires_at__lt=now,
+    ).update(restore_status="", restore_expires_at=None)
+
     q = request.GET.get("q", "").strip()
 
     files = DriveFile.objects.filter(
@@ -465,7 +475,7 @@ def archive_view(request):
         owner_sub=owner_sub,
         storage_class__in=(DriveFile.GLACIER, DriveFile.DEEP_ARCHIVE),
         deleted_at__isnull=True,
-    )
+    ).exclude(restore_status=DriveFile.RESTORE_READY)
     if q:
         archived_files = archived_files.filter(name__icontains=q)
 

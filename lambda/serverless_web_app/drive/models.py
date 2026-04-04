@@ -64,6 +64,7 @@ class DriveFile(models.Model):
     restore_status       = models.CharField(max_length=10, blank=True, default="",
                                             choices=RESTORE_STATUS_CHOICES)
     restore_notify_email = models.EmailField(blank=True, default="")
+    restore_expires_at   = models.DateTimeField(null=True, blank=True)
 
     deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
