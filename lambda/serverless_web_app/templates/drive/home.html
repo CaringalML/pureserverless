@@ -235,15 +235,9 @@
 
         {# Storage usage #}
         {% if storage_used %}
-        <div class="px-4 py-3 border-t border-zinc-800/80">
-            <div class="flex items-center justify-between mb-1.5">
-                <span class="text-[11px] text-zinc-500 font-medium uppercase tracking-wide">Storage</span>
-                <span class="text-[11px] text-zinc-400 font-medium">{{ storage_used }}</span>
-            </div>
-            <div class="w-full bg-zinc-800 rounded-full h-1.5 overflow-hidden">
-                <div class="h-1.5 rounded-full {% if storage_pct > 85 %}bg-red-500{% elif storage_pct > 60 %}bg-yellow-500{% else %}bg-gradient-to-r from-sky-500 to-indigo-500{% endif %}"
-                     style="width: {{ storage_pct }}%; min-width: {% if storage_pct > 0 %}4px{% else %}0{% endif %}"></div>
-            </div>
+        <div class="px-4 py-3 border-t border-zinc-800/80 flex items-center justify-between">
+            <span class="text-[11px] text-zinc-500 font-medium uppercase tracking-wide">Storage used</span>
+            <span class="text-[11px] text-zinc-400 font-medium">{{ storage_used }}</span>
         </div>
         {% endif %}
 
