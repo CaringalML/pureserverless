@@ -285,6 +285,9 @@ def confirm_upload(request):
             Key=data["s3_key"],
         )
 
+        requested_class = data.get("storage_class", "")
+        storage_class = requested_class if requested_class == DriveFile.GLACIER_IR else DriveFile.STANDARD
+
         drive_file = DriveFile.objects.create(
             owner_sub=owner_sub,
             name=data["filename"],
@@ -292,7 +295,17 @@ def confirm_upload(request):
             size=head["ContentLength"],
             content_type=head.get("ContentType", "application/octet-stream"),
             folder=folder,
+            storage_class=storage_class,
         )
+
+        if storage_class == DriveFile.GLACIER_IR:
+            _s3().copy_object(
+                Bucket=settings.DRIVE_BUCKET_NAME,
+                CopySource={"Bucket": settings.DRIVE_BUCKET_NAME, "Key": data["s3_key"]},
+                Key=data["s3_key"],
+                StorageClass=DriveFile.GLACIER_IR,
+                MetadataDirective="COPY",
+            )
 
         html = render(request, "drive/partials/file_row.html", {"file": drive_file}).content.decode()
         return JsonResponse({"html": html, "id": drive_file.id})
