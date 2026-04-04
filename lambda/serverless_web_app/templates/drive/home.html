@@ -346,18 +346,23 @@
                 <button class="btn-primary text-sm" style="width:auto;padding:7px 16px;background:#7c3aed;" :disabled="archiving"
                         @click="
                             archiving = true;
-                            const resp = await fetch('{% url 'drive_bulk_restore' %}', {
-                                method: 'POST',
-                                headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
-                                body: JSON.stringify({ ids: selected })
-                            });
-                            const data = await resp.json();
-                            data.updated?.forEach(({ id, html }) => {
-                                const el = document.getElementById('file-' + id);
-                                if (el) el.outerHTML = html;
-                            });
-                            selected = [];
-                            archiving = false;
+                            try {
+                                const resp = await fetch('{% url 'drive_bulk_restore' %}', {
+                                    method: 'POST',
+                                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
+                                    body: JSON.stringify({ ids: selected })
+                                });
+                                const data = await resp.json();
+                                data.updated?.forEach(({ id, html }) => {
+                                    const el = document.getElementById('file-' + id);
+                                    if (el) el.outerHTML = html;
+                                });
+                                selected = [];
+                            } catch(err) {
+                                alert('Restore failed: ' + err.message);
+                            } finally {
+                                archiving = false;
+                            }
                         ">
                     <span class="spinner" x-show="archiving" x-cloak></span>
                     <span x-text="archiving ? 'Requesting restore\u2026' : 'Restore selected'"></span>
@@ -534,6 +539,9 @@
                                 if (el) el.outerHTML = html;
                             });
                             selected = [];
+                        }).catch(err => {
+                            alert('Archive failed: ' + err.message);
+                        }).finally(() => {
                             archiving = false;
                         });
                     }
