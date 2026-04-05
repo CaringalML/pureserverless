@@ -51,6 +51,7 @@ document.addEventListener('alpine:init', () => {
             if (e.ctrlKey || e.metaKey) {
                 this.toggleSelect(pk);
             } else {
+                this.selectedFolders = [];
                 this.selected = this.isSelected(pk) && this.selected.length === 1 ? [] : [pk];
             }
         },
