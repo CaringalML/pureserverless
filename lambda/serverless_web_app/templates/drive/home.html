@@ -716,7 +716,7 @@ document.addEventListener('alpine:init', () => {
                 "
                 class="w-full flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-white/5 hover:text-zinc-100 transition-colors">
             <svg class="w-4 h-4 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 12v-8m0 8l-3-3m3 3l3-3"/></svg>
-            <span x-text="selected.length > 0 ? `Download (${selected.length})` : 'Download'"></span>
+            Download
         </button>
 
         {# Archive to Deep Archive — non-archived files, or any selection that includes files #}
@@ -747,7 +747,7 @@ document.addEventListener('alpine:init', () => {
                 "
                 class="w-full flex items-center gap-3 px-4 py-2 text-sm text-purple-400 hover:bg-white/5 hover:text-purple-300 transition-colors">
             <svg class="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
-            <span x-text="selected.length > 0 ? `Archive (${selected.length})` : 'Archive'"></span>
+            Archive
         </button>
 
         {# Restore — archived files only #}
