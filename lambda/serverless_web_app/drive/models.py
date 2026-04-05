@@ -72,11 +72,12 @@ class DriveFile(models.Model):
         ordering = ["-uploaded_at"]
 
     def size_display(self):
+        size = float(self.size)
         for unit in ["B", "KB", "MB", "GB"]:
-            if self.size < 1024:
-                return f"{self.size:.1f} {unit}"
-            self.size /= 1024
-        return f"{self.size:.1f} TB"
+            if size < 1024:
+                return f"{size:.1f} {unit}"
+            size /= 1024
+        return f"{size:.1f} TB"
 
     def is_viewable_inline(self):
         return self.content_type.startswith(("image/", "video/", "audio/", "application/pdf", "text/"))
