@@ -171,7 +171,9 @@ def drive_home(request, folder_pk=None):
     _, ctx["storage_used"], ctx["storage_pct"] = _storage_stats(owner_sub)
     ctx["total_files"] = DriveFile.objects.filter(owner_sub=owner_sub, deleted_at__isnull=True).count()
 
-    return render(request, "drive/home.html", ctx)
+    response = render(request, "drive/home.html", ctx)
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 @cognito_login_required
@@ -453,7 +455,9 @@ def recycle_bin(request):
     _, ctx["storage_used"], ctx["storage_pct"] = _storage_stats(owner_sub)
     ctx["total_files"] = DriveFile.objects.filter(owner_sub=owner_sub, deleted_at__isnull=True).count()
 
-    return render(request, "drive/home.html", ctx)
+    response = render(request, "drive/home.html", ctx)
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 @cognito_login_required
@@ -529,7 +533,9 @@ def archive_view(request):
     _, ctx["storage_used"], ctx["storage_pct"] = _storage_stats(owner_sub)
     ctx["total_files"] = DriveFile.objects.filter(owner_sub=owner_sub, deleted_at__isnull=True).count()
 
-    return render(request, "drive/home.html", ctx)
+    response = render(request, "drive/home.html", ctx)
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 @cognito_login_required

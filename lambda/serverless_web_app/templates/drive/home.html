@@ -9,10 +9,6 @@
 
 {% block content %}
 <script>
-// Reload when browser restores from bfcache (back/forward navigation)
-// to prevent stale or mid-update DOM being shown
-window.addEventListener('pageshow', (e) => { if (e.persisted) window.location.reload(); });
-
 document.addEventListener('alpine:init', () => {
     Alpine.data('driveApp', () => ({
         uploading: false,
