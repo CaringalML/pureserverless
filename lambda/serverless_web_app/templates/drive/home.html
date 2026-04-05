@@ -77,6 +77,7 @@ document.addEventListener('alpine:init', () => {
 
         rowClickFolder(e, pk) {
             if (e.ctrlKey || e.metaKey) {
+                this.selected = [];
                 this.toggleSelectFolder(pk);
             } else {
                 this.selectedFolders = this.isSelectedFolder(pk) && this.selectedFolders.length === 1 ? [] : [pk];
@@ -701,8 +702,8 @@ document.addEventListener('alpine:init', () => {
             Preview
         </button>
 
-        {# Download — files, or any selection that includes files #}
-        <button x-show="selected.length > 0 || (!ctx.isFolder && (!ctx.archived || ctx.restoreStatus === 'ready'))"
+        {# Download — right-clicked file, or right-clicked folder with files also selected #}
+        <button x-show="(!ctx.isFolder && (!ctx.archived || ctx.restoreStatus === 'ready')) || (ctx.isFolder && selected.length > 0)"
                 @click="
                     const ids = selected.length > 0 ? selected : [ctx.pk];
                     ids.forEach(id => {
