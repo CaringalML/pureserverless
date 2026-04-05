@@ -260,9 +260,11 @@ document.addEventListener('alpine:init', () => {
                 this.uploadProgress = 0;
                 this.uploadLabel    = '';
                 // Reload the file/folder list from the server so injected rows
-                // survive navigation and reflect the real DB state
-                htmx.trigger('#search-results', 'refresh');
-                htmx.ajax('GET', window.location.href, { target: '#search-results', swap: 'innerHTML' });
+                // reflect the real DB state without a full page reload
+                fetch(window.location.href, { headers: { 'HX-Request': 'true' } })
+                    .then(r => r.text())
+                    .then(html => { document.getElementById('search-results').innerHTML = html; })
+                    .catch(() => {});
             }
         },
 
