@@ -701,10 +701,10 @@ document.addEventListener('alpine:init', () => {
             Preview
         </button>
 
-        {# Download — files only #}
-        <button x-show="!ctx.isFolder && (!ctx.archived || ctx.restoreStatus === 'ready')"
+        {# Download — files, or any selection that includes files #}
+        <button x-show="selected.length > 0 || (!ctx.isFolder && (!ctx.archived || ctx.restoreStatus === 'ready'))"
                 @click="
-                    const ids = selected.length > 1 ? selected : [ctx.pk];
+                    const ids = selected.length > 0 ? selected : [ctx.pk];
                     ids.forEach(id => {
                         const iframe = document.createElement('iframe');
                         iframe.style.display = 'none';
@@ -716,14 +716,14 @@ document.addEventListener('alpine:init', () => {
                 "
                 class="w-full flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-white/5 hover:text-zinc-100 transition-colors">
             <svg class="w-4 h-4 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 12v-8m0 8l-3-3m3 3l3-3"/></svg>
-            <span x-text="selected.length > 1 ? `Download (${selected.length})` : 'Download'"></span>
+            <span x-text="selected.length > 0 ? `Download (${selected.length})` : 'Download'"></span>
         </button>
 
-        {# Archive to Deep Archive — non-archived files only #}
-        <button x-show="!ctx.isFolder && !ctx.archived"
+        {# Archive to Deep Archive — non-archived files, or any selection that includes files #}
+        <button x-show="selected.length > 0 || (!ctx.isFolder && !ctx.archived)"
                 @click="
                     closeCtx();
-                    const label = selected.length > 1 ? `${selected.length} files` : `'${ctx.name}'`;
+                    const label = selected.length > 0 ? `${selected.length} file${selected.length > 1 ? 's' : ''}` : `'${ctx.name}'`;
                     const ok = await showConfirm('Archive to Deep Archive', `Archive ${label} to Glacier Deep Archive?`, 'Archive', false);
                     if(ok) {
                         archiving = true;
