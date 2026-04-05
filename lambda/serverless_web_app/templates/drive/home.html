@@ -719,8 +719,8 @@ document.addEventListener('alpine:init', () => {
             <span x-text="selected.length > 0 ? `Download (${selected.length})` : 'Download'"></span>
         </button>
 
-        {# Archive to Deep Archive — non-archived files, or any selection that includes files #}
-        <button x-show="selected.length > 0 || (!ctx.isFolder && !ctx.archived)"
+        {# Archive to Deep Archive — files only, hidden when folders are in the selection #}
+        <button x-show="selectedFolders.length === 0 && (selected.length > 0 || (!ctx.isFolder && !ctx.archived))"
                 @click="
                     closeCtx();
                     const label = selected.length > 0 ? `${selected.length} file${selected.length > 1 ? 's' : ''}` : `'${ctx.name}'`;
