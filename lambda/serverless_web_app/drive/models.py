@@ -51,7 +51,7 @@ class DriveFile(models.Model):
     storage_class = models.CharField(
         max_length=20,
         choices=STORAGE_CLASS_CHOICES,
-        default=STANDARD,
+        default=GLACIER_IR,
     )
     uploaded_at  = models.DateTimeField(auto_now_add=True)
 

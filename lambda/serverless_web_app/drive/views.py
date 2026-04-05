@@ -144,8 +144,9 @@ def drive_home(request, folder_pk=None):
         folder=current_folder,
         deleted_at__isnull=True,
     ).filter(
-        # Show standard-tier files, or archived files that have been restored (ready)
-        Q(storage_class__in=(DriveFile.STANDARD, DriveFile.STANDARD_IA, DriveFile.GLACIER_IR))
+        # Show instantly-accessible tiers (GLACIER_IR is default; STANDARD/STANDARD_IA kept for legacy files)
+        # or Deep Archive / Glacier files that have been restored (ready)
+        Q(storage_class__in=(DriveFile.GLACIER_IR, DriveFile.STANDARD, DriveFile.STANDARD_IA))
         | Q(storage_class__in=(DriveFile.GLACIER, DriveFile.DEEP_ARCHIVE), restore_status=DriveFile.RESTORE_READY)
     )
     subfolders = DriveFolder.objects.filter(owner_sub=owner_sub, parent=current_folder)
