@@ -20,4 +20,6 @@ urlpatterns = [
     path("bin/",                          views.recycle_bin,        name="drive_bin"),
     path("bin/<int:pk>/restore/",         views.restore_from_bin,   name="drive_bin_restore"),
     path("bin/<int:pk>/delete/",          views.permanent_delete,   name="drive_bin_delete"),
+    path("folder/<int:pk>/zip/",          views.zip_folder,         name="drive_zip_folder"),
+    path("job/<int:job_id>/status/",      views.job_status,         name="drive_job_status"),
 ]

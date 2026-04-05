@@ -85,6 +85,10 @@ CLOUDFRONT_DOMAIN               = os.environ.get("CLOUDFRONT_DOMAIN", "")
 CLOUDFRONT_KEY_PAIR_ID          = os.environ.get("CLOUDFRONT_KEY_PAIR_ID", "")
 CLOUDFRONT_PRIVATE_KEY_SSM_NAME = os.environ.get("CLOUDFRONT_PRIVATE_KEY_SSM_NAME", "")
 
+# AWS Batch (folder zip downloads)
+BATCH_JOB_QUEUE      = os.environ.get("BATCH_JOB_QUEUE", "")
+BATCH_JOB_DEFINITION = os.environ.get("BATCH_JOB_DEFINITION", "")
+
 # Resend email
 DRIVE_FROM_EMAIL = os.environ.get("DRIVE_FROM_EMAIL", "drive@nodepulsecaringal.xyz")
 

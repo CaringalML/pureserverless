@@ -106,6 +106,26 @@ resource "aws_iam_role_policy" "lambda_ssm_resend_key" {
   })
 }
 
+# Allow Lambda to submit and describe AWS Batch jobs
+resource "aws_iam_role_policy" "lambda_batch" {
+  name = "${var.lambda_function_name}-${var.environment}-batch-policy"
+  role = aws_iam_role.lambda_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "batch:SubmitJob",
+          "batch:DescribeJobs",
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 # Allow Lambda to call Cognito on behalf of the application
 resource "aws_iam_role_policy" "lambda_cognito" {
   name = "${var.lambda_function_name}-${var.environment}-cognito-policy"

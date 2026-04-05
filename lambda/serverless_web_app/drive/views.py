@@ -23,7 +23,7 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.views.decorators.http import require_POST
 
 from accounts.decorators import cognito_login_required
-from .models import DriveFile, DriveFolder
+from .models import DriveFile, DriveFolder, BatchJob
 
 
 # ---------------------------------------------------------------------------
@@ -724,3 +724,172 @@ def _send_archive_email(to_email, file_names):
         "subject": f"NovaDrive: {count} {noun} archived to Glacier Deep Archive",
         "html": html_body,
     })
+
+
+# ---------------------------------------------------------------------------
+# Batch zip-folder
+# ---------------------------------------------------------------------------
+
+INLINE_ZIP_THRESHOLD = 50 * 1024 * 1024  # 50 MB — zip inline in Lambda below this
+
+
+def _collect_folder_files(folder_pk, owner_sub):
+    """
+    Iteratively walk the folder tree and return a list of (DriveFile, arc_path) tuples.
+    Only non-archived, non-deleted files are included (archived files can't be read from S3).
+    arc_path is the relative path inside the zip (e.g. "subfolder/file.jpg").
+    """
+    accessible = (DriveFile.STANDARD, DriveFile.STANDARD_IA, DriveFile.GLACIER_IR)
+    result = []
+    queue = [(folder_pk, "")]  # (folder_pk, path_prefix)
+    visited = set()
+
+    while queue:
+        fk, prefix = queue.pop(0)
+        if fk in visited:
+            continue
+        visited.add(fk)
+
+        for sf in DriveFolder.objects.filter(parent_id=fk, owner_sub=owner_sub):
+            child_prefix = f"{prefix}/{sf.name}" if prefix else sf.name
+            queue.append((sf.pk, child_prefix))
+
+        for f in DriveFile.objects.filter(
+            folder_id=fk, owner_sub=owner_sub,
+            deleted_at__isnull=True, storage_class__in=accessible,
+        ):
+            arc_path = f"{prefix}/{f.name}" if prefix else f.name
+            result.append((f, arc_path))
+
+    return result
+
+
+def _folder_total_size(folder_pk, owner_sub):
+    """Sum of accessible file sizes in the entire folder tree."""
+    accessible = (DriveFile.STANDARD, DriveFile.STANDARD_IA, DriveFile.GLACIER_IR)
+    queue = [folder_pk]
+    visited = set()
+    folder_pks = []
+
+    while queue:
+        fk = queue.pop()
+        if fk in visited:
+            continue
+        visited.add(fk)
+        folder_pks.append(fk)
+        queue.extend(
+            DriveFolder.objects.filter(parent_id=fk, owner_sub=owner_sub)
+                        .values_list("pk", flat=True)
+        )
+
+    total = DriveFile.objects.filter(
+        folder_id__in=folder_pks, owner_sub=owner_sub,
+        deleted_at__isnull=True, storage_class__in=accessible,
+    ).aggregate(total=Sum("size"))["total"] or 0
+    return total
+
+
+def _zip_and_upload(folder_pk, owner_sub, s3_client, bucket):
+    """Zip all accessible files in folder tree, upload to temp-zips/, return S3 key."""
+    import io, zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for drv_file, arc_path in _collect_folder_files(folder_pk, owner_sub):
+            try:
+                obj = s3_client.get_object(Bucket=bucket, Key=drv_file.s3_key)
+                zf.writestr(arc_path, obj["Body"].read())
+            except Exception as e:
+                logger.warning("zip_skip key=%s err=%s", drv_file.s3_key, e)
+    buf.seek(0)
+    zip_key = f"temp-zips/{uuid.uuid4()}.zip"
+    s3_client.put_object(Bucket=bucket, Key=zip_key, Body=buf.getvalue(),
+                         ContentType="application/zip")
+    return zip_key
+
+
+@cognito_login_required
+@require_POST
+def zip_folder(request, pk):
+    """
+    Zip a folder for download.
+    - Small folders (≤50 MB): zip inline in Lambda, return immediate presigned URL.
+    - Large folders: submit an AWS Batch job, return job ID for polling.
+    """
+    owner_sub = _get_owner_sub(request)
+    folder = get_object_or_404(DriveFolder, pk=pk, owner_sub=owner_sub)
+    s3 = _s3()
+    bucket = settings.DRIVE_BUCKET_NAME
+
+    total_size = _folder_total_size(pk, owner_sub)
+
+    if total_size <= INLINE_ZIP_THRESHOLD:
+        try:
+            zip_key = _zip_and_upload(pk, owner_sub, s3, bucket)
+            url = s3.generate_presigned_url(
+                "get_object",
+                Params={
+                    "Bucket": bucket,
+                    "Key": zip_key,
+                    "ResponseContentDisposition": f'attachment; filename="{folder.name}.zip"',
+                },
+                ExpiresIn=3600,
+            )
+            return JsonResponse({"status": "ready", "url": url})
+        except Exception as e:
+            logger.error("inline zip failed folder=%s err=%s", pk, e)
+            return JsonResponse({"error": str(e)}, status=500)
+
+    # Large folder — delegate to AWS Batch
+    batch_job = BatchJob.objects.create(
+        type="zip_folder",
+        owner_sub=owner_sub,
+        folder_name=folder.name,
+        status=BatchJob.PENDING,
+    )
+    try:
+        batch = boto3.client("batch", region_name=settings.AWS_REGION)
+        response = batch.submit_job(
+            jobName=f"zip-folder-{pk}-{batch_job.pk}",
+            jobQueue=settings.BATCH_JOB_QUEUE,
+            jobDefinition=settings.BATCH_JOB_DEFINITION,
+            containerOverrides={
+                "environment": [
+                    {"name": "JOB_TYPE",              "value": "zip_folder"},
+                    {"name": "FOLDER_ID",             "value": str(pk)},
+                    {"name": "OWNER_SUB",             "value": owner_sub},
+                    {"name": "JOB_DB_ID",             "value": str(batch_job.pk)},
+                    {"name": "DRIVE_BUCKET_NAME",     "value": bucket},
+                    {"name": "AWS_REGION",            "value": settings.AWS_REGION},
+                    {"name": "SSM_DATABASE_URL_NAME", "value": os.environ.get("SSM_DATABASE_URL_NAME", "")},
+                ]
+            },
+        )
+        batch_job.job_id = response["jobId"]
+        batch_job.save(update_fields=["job_id"])
+        return JsonResponse({"status": "pending", "job_id": batch_job.pk})
+    except Exception as e:
+        logger.error("batch submit failed: %s", e)
+        batch_job.status = BatchJob.FAILED
+        batch_job.save(update_fields=["status"])
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@cognito_login_required
+def job_status(request, job_id):
+    """Poll the status of a batch job. Returns presigned URL when ready."""
+    owner_sub = _get_owner_sub(request)
+    job = get_object_or_404(BatchJob, pk=job_id, owner_sub=owner_sub)
+
+    if job.status == BatchJob.READY:
+        url = _s3().generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": settings.DRIVE_BUCKET_NAME,
+                "Key": job.result_key,
+                "ResponseContentDisposition": f'attachment; filename="{job.folder_name}.zip"',
+            },
+            ExpiresIn=3600,
+        )
+        return JsonResponse({"status": "ready", "url": url})
+
+    return JsonResponse({"status": job.status})

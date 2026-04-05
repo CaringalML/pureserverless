@@ -33,6 +33,8 @@ resource "aws_lambda_function" "serverless_web_app" {
       CSRF_TRUSTED_ORIGINS            = "https://${var.custom_domain}"
       SSM_RESEND_API_KEY_NAME         = aws_ssm_parameter.resend_api_key.name
       DRIVE_FROM_EMAIL                = "drive@nodepulsecaringal.xyz"
+      BATCH_JOB_QUEUE                 = aws_batch_job_queue.novadrive.name
+      BATCH_JOB_DEFINITION            = aws_batch_job_definition.zip_folder.name
     }
   }
 

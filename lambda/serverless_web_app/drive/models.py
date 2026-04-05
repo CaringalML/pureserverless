@@ -100,3 +100,32 @@ class DriveFile(models.Model):
         expires = self.deleted_at + datetime.timedelta(days=30)
         remaining = (expires - datetime.datetime.now(datetime.timezone.utc)).days
         return max(remaining, 0)
+
+
+class BatchJob(models.Model):
+    PENDING = "pending"
+    RUNNING = "running"
+    READY   = "ready"
+    FAILED  = "failed"
+
+    STATUS_CHOICES = [
+        (PENDING, "Pending"),
+        (RUNNING, "Running"),
+        (READY,   "Ready"),
+        (FAILED,  "Failed"),
+    ]
+
+    job_id      = models.CharField(max_length=128, blank=True, default="")  # AWS Batch job ID
+    type        = models.CharField(max_length=32, default="zip_folder")
+    owner_sub   = models.CharField(max_length=128, db_index=True)
+    folder_name = models.CharField(max_length=255, default="")
+    status      = models.CharField(max_length=16, choices=STATUS_CHOICES, default=PENDING)
+    result_key  = models.CharField(max_length=512, blank=True, default="")  # S3 key of zip
+    created_at  = models.DateTimeField(auto_now_add=True)
+    expires_at  = models.DateTimeField(null=True, blank=True)  # 24h from ready
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"BatchJob({self.type}, {self.status}, folder={self.folder_name})"
