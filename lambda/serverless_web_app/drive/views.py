@@ -32,6 +32,30 @@ from .models import DriveFile, DriveFolder, BatchJob
 _cf_private_key_cache = None
 
 
+def _get_folder_path(folder_pk, owner_sub):
+    """Walk the folder parent chain and return a safe S3 path string.
+
+    e.g. folder 'vacation' inside 'photos' → 'photos/vacation'
+    Root uploads (folder_pk is None) return None (no extra path segment).
+    """
+    if not folder_pk:
+        return None
+    parts = []
+    visited = set()
+    try:
+        folder = DriveFolder.objects.get(pk=folder_pk, owner_sub=owner_sub)
+        while folder and folder.pk not in visited:
+            visited.add(folder.pk)
+            safe = "".join(
+                c if c.isalnum() or c in "-_. " else "_" for c in folder.name
+            ).strip() or "_"
+            parts.insert(0, safe)
+            folder = folder.parent
+    except DriveFolder.DoesNotExist:
+        pass
+    return "/".join(parts) if parts else None
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -259,8 +283,13 @@ def upload_url(request):
         filename     = data.get("filename", "unnamed")
         content_type = data.get("content_type", "application/octet-stream")
         owner_sub    = _get_owner_sub(request)
+        folder_pk    = data.get("folder_pk")
 
-        s3_key = f"{owner_sub}/{uuid.uuid4()}/{filename}"
+        folder_path = _get_folder_path(folder_pk, owner_sub)
+        if folder_path:
+            s3_key = f"{owner_sub}/{folder_path}/{uuid.uuid4()}/{filename}"
+        else:
+            s3_key = f"{owner_sub}/{uuid.uuid4()}/{filename}"
 
         presigned = _s3().generate_presigned_post(
             Bucket=settings.DRIVE_BUCKET_NAME,

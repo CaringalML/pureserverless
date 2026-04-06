@@ -278,7 +278,7 @@ document.addEventListener('alpine:init', () => {
                 const resp = await fetch('{% url "drive_upload_url" %}', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
-                    body: JSON.stringify({ filename: file.name, content_type: file.type || 'application/octet-stream' }),
+                    body: JSON.stringify({ filename: file.name, content_type: file.type || 'application/octet-stream', folder_pk: folderPk }),
                 });
                 if (!resp.ok) throw new Error(`Upload URL failed (HTTP ${resp.status})`);
                 const { url, fields, s3_key, error } = await resp.json();
