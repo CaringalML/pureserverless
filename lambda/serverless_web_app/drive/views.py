@@ -406,6 +406,38 @@ def restore_from_bin(request, pk):
 
 @cognito_login_required
 @require_POST
+def bulk_bin_restore(request):
+    """Restore multiple files from the Recycle Bin back to My Drive."""
+    data = json.loads(request.body)
+    file_ids = data.get("ids", [])
+    owner_sub = _get_owner_sub(request)
+    files = DriveFile.objects.filter(pk__in=file_ids, owner_sub=owner_sub, deleted_at__isnull=False)
+    files.update(deleted_at=None)
+    return JsonResponse({"restored": list(file_ids)})
+
+
+@cognito_login_required
+@require_POST
+def bulk_bin_delete(request):
+    """Permanently delete multiple files from S3 and DB."""
+    data = json.loads(request.body)
+    file_ids = data.get("ids", [])
+    owner_sub = _get_owner_sub(request)
+    files = list(DriveFile.objects.filter(pk__in=file_ids, owner_sub=owner_sub, deleted_at__isnull=False))
+    s3 = _s3()
+    deleted_ids = []
+    for f in files:
+        try:
+            s3.delete_object(Bucket=settings.DRIVE_BUCKET_NAME, Key=f.s3_key)
+        except ClientError:
+            pass
+        f.delete()
+        deleted_ids.append(f.pk)
+    return JsonResponse({"deleted": deleted_ids})
+
+
+@cognito_login_required
+@require_POST
 def permanent_delete(request, pk):
     """Permanently delete a file from S3 and DB — no recovery possible."""
     file = get_object_or_404(DriveFile, pk=pk, owner_sub=_get_owner_sub(request), deleted_at__isnull=False)
