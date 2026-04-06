@@ -979,13 +979,16 @@ document.addEventListener('alpine:init', () => {
                             headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrf()},
                             body: JSON.stringify({ ids })
                         }).then(r => r.json()).then(data => {
-                            data.updated?.forEach(({ id, html }) => {
-                                const el = document.getElementById('file-' + id);
-                                if (el) el.outerHTML = html;
+                            const count = data.updated?.length ?? 0;
+                            data.updated?.forEach(({ id }) => {
+                                document.getElementById('file-' + id)?.remove();
                             });
                             selected = [];
+                            if (count > 0) {
+                                this.showToast(`Archived ${count} file${count !== 1 ? 's' : ''} to Deep Archive`, 'success');
+                            }
                         }).catch(err => {
-                            alert('Archive failed: ' + err.message);
+                            this.showToast('Archive failed: ' + err.message, 'error');
                         }).finally(() => {
                             archiving = false;
                         });
