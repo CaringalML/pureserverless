@@ -157,7 +157,7 @@ def drive_home(request, folder_pk=None):
     ).filter(
         # Show instantly-accessible files, or Deep Archive / Glacier files that have been restored
         Q(storage_class=DriveFile.GLACIER_IR)
-        | Q(storage_class__in=(DriveFile.GLACIER, DriveFile.DEEP_ARCHIVE), restore_status=DriveFile.RESTORE_READY)
+        | Q(storage_class=DriveFile.DEEP_ARCHIVE, restore_status=DriveFile.RESTORE_READY)
     )
     subfolders = DriveFolder.objects.filter(owner_sub=owner_sub, parent=current_folder, deleted_at__isnull=True)
 
@@ -447,7 +447,7 @@ def bulk_bin_restore(request):
     folder_ids = data.get("folder_ids", [])
     owner_sub = _get_owner_sub(request)
     files = list(DriveFile.objects.filter(pk__in=file_ids, owner_sub=owner_sub, deleted_at__isnull=False))
-    archived_ids = [f.pk for f in files if f.storage_class in (DriveFile.GLACIER, DriveFile.DEEP_ARCHIVE)]
+    archived_ids = [f.pk for f in files if f.storage_class == DriveFile.DEEP_ARCHIVE]
     DriveFile.objects.filter(pk__in=file_ids, owner_sub=owner_sub, deleted_at__isnull=False).update(deleted_at=None)
     DriveFolder.objects.filter(pk__in=folder_ids, owner_sub=owner_sub, deleted_at__isnull=False).update(deleted_at=None)
     return JsonResponse({
@@ -634,7 +634,7 @@ def archive_view(request):
 
     archived_files = DriveFile.objects.filter(
         owner_sub=owner_sub,
-        storage_class__in=(DriveFile.GLACIER, DriveFile.DEEP_ARCHIVE),
+        storage_class=DriveFile.DEEP_ARCHIVE,
         deleted_at__isnull=True,
     ).exclude(restore_status=DriveFile.RESTORE_READY)
     if q:
@@ -681,7 +681,7 @@ def bulk_restore(request):
     files = DriveFile.objects.filter(
         id__in=file_ids,
         owner_sub=owner_sub,
-        storage_class__in=(DriveFile.GLACIER, DriveFile.DEEP_ARCHIVE),
+        storage_class=DriveFile.DEEP_ARCHIVE,
         restore_status="",
         deleted_at__isnull=True,
     )

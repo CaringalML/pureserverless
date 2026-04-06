@@ -34,12 +34,10 @@ class DriveFolder(models.Model):
 
 class DriveFile(models.Model):
     GLACIER_IR    = "GLACIER_IR"
-    GLACIER       = "GLACIER"
     DEEP_ARCHIVE  = "DEEP_ARCHIVE"
 
     STORAGE_CLASS_CHOICES = [
         (GLACIER_IR,   "Glacier Instant Retrieval"),
-        (GLACIER,      "Glacier Flexible Retrieval"),
         (DEEP_ARCHIVE, "Deep Archive"),
     ]
 
@@ -88,7 +86,7 @@ class DriveFile(models.Model):
         return self.content_type.startswith(("image/", "video/", "audio/", "application/pdf", "text/"))
 
     def is_archived(self):
-        return self.storage_class in (self.GLACIER, self.DEEP_ARCHIVE)
+        return self.storage_class == self.DEEP_ARCHIVE
 
     def storage_class_label(self):
         if self.is_archived() and self.restore_status == self.RESTORE_READY:
