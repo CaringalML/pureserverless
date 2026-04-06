@@ -121,6 +121,7 @@ class BatchJob(models.Model):
     folder_name = models.CharField(max_length=255, default="")
     status      = models.CharField(max_length=16, choices=STATUS_CHOICES, default=PENDING)
     result_key  = models.CharField(max_length=512, blank=True, default="")  # S3 key of zip
+    progress    = models.IntegerField(default=0)                            # 0-100
     created_at  = models.DateTimeField(auto_now_add=True)
     expires_at  = models.DateTimeField(null=True, blank=True)  # 24h from ready
 

@@ -82,6 +82,12 @@ def _collect_files(folder_pk, owner_sub):
     return result
 
 
+def _report_progress(job_db_id, pct):
+    """Write progress to DB — only on 5% boundaries to limit writes."""
+    from drive.models import BatchJob
+    BatchJob.objects.filter(pk=job_db_id).update(progress=pct)
+
+
 def run_zip_folder(folder_ids, owner_sub, job_db_id):
     from drive.models import DriveFolder, BatchJob
 
@@ -93,21 +99,36 @@ def run_zip_folder(folder_ids, owner_sub, job_db_id):
     region = os.environ.get("AWS_REGION", "ap-southeast-2")
     s3 = boto3.client("s3", region_name=region)
 
+    # Collect all files across all folders first so we can track % progress
+    all_files = []  # list of (folder_name, drv_file, rel_path)
+    for folder in folders:
+        for drv_file, rel_path in _collect_files(folder.pk, owner_sub):
+            all_files.append((folder.name, drv_file, rel_path))
+
+    total = len(all_files)
+    log.info("Total files to zip: %d across %d folder(s)", total, len(folders))
+
+    last_reported_pct = 0
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for folder in folders:
-            # Each folder becomes a top-level directory in the zip
-            files = _collect_files(folder.pk, owner_sub)
-            log.info("Zipping %d files from folder %s (%s)", len(files), folder.pk, folder.name)
-            for drv_file, rel_path in files:
-                arc_path = f"{folder.name}/{rel_path}"
-                try:
-                    obj = s3.get_object(Bucket=bucket, Key=drv_file.s3_key)
-                    zf.writestr(arc_path, obj["Body"].read())
-                    log.info("  added %s", arc_path)
-                except Exception as e:
-                    log.warning("  skip %s: %s", drv_file.s3_key, e)
+        for i, (folder_name, drv_file, rel_path) in enumerate(all_files):
+            arc_path = f"{folder_name}/{rel_path}"
+            try:
+                obj = s3.get_object(Bucket=bucket, Key=drv_file.s3_key)
+                zf.writestr(arc_path, obj["Body"].read())
+                log.info("  [%d/%d] added %s", i + 1, total, arc_path)
+            except Exception as e:
+                log.warning("  skip %s: %s", drv_file.s3_key, e)
 
+            # Report progress every 5% — cap at 90 (final 10% = S3 upload)
+            if total > 0:
+                pct = min(int((i + 1) / total * 90), 90)
+                if pct >= last_reported_pct + 5:
+                    last_reported_pct = pct
+                    _report_progress(job_db_id, pct)
+
+    # S3 upload = final 10%
+    _report_progress(job_db_id, 95)
     buf.seek(0)
     zip_key = f"temp-zips/{uuid.uuid4()}.zip"
     s3.put_object(Bucket=bucket, Key=zip_key, Body=buf.getvalue(),
@@ -118,6 +139,7 @@ def run_zip_folder(folder_ids, owner_sub, job_db_id):
     BatchJob.objects.filter(pk=job_db_id).update(
         status=BatchJob.READY,
         result_key=zip_key,
+        progress=100,
         expires_at=now + datetime.timedelta(hours=24),
     )
     log.info("Job %s marked READY", job_db_id)

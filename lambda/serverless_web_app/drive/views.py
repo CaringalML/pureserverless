@@ -887,6 +887,6 @@ def job_status(request, job_id):
             },
             ExpiresIn=3600,
         )
-        return JsonResponse({"status": "ready", "url": url})
+        return JsonResponse({"status": "ready", "progress": 100, "url": url})
 
-    return JsonResponse({"status": job.status})
+    return JsonResponse({"status": job.status, "progress": job.progress})
