@@ -240,12 +240,31 @@ document.addEventListener('alpine:init', () => {
             event.target.value = '';
         },
 
+        _addUploadToast(name) {
+            const id = ++this._toastSeq;
+            this.toasts.push({ id, message: name, type: 'progress', progress: 0, done: false });
+            return id;
+        },
+        _updateUploadToast(id, pct) {
+            const t = this.toasts.find(t => t.id === id);
+            if (t) t.progress = pct;
+        },
+        _completeUploadToast(id) {
+            const t = this.toasts.find(t => t.id === id);
+            if (t) { t.progress = 100; t.done = true; t.type = 'success'; }
+            setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 3000);
+        },
+        _failUploadToast(id, name) {
+            const t = this.toasts.find(t => t.id === id);
+            if (t) { t.type = 'error'; t.message = `Failed: ${name}`; t.progress = null; }
+            setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 6000);
+        },
+
         async uploadFiles(files) {
             this.uploading = true;
             let done = 0;
             for (const file of files) {
-                this.uploadLabel    = files.length > 1 ? `${file.name} (${done + 1}/${files.length})` : file.name;
-                this.uploadProgress = 0;
+                const toastId = this._addUploadToast(file.name);
                 try {
                     const resp = await fetch('{% url "drive_upload_url" %}', {
                         method: 'POST',
@@ -264,10 +283,10 @@ document.addEventListener('alpine:init', () => {
                         xhr.open('POST', url);
                         xhr.upload.addEventListener('progress', (e) => {
                             if (e.lengthComputable)
-                                this.uploadProgress = Math.round((e.loaded / e.total) * 90);
+                                this._updateUploadToast(toastId, Math.round((e.loaded / e.total) * 90));
                         });
                         xhr.addEventListener('load', () => {
-                            if (xhr.status >= 200 && xhr.status < 300) { this.uploadProgress = 95; resolve(); }
+                            if (xhr.status >= 200 && xhr.status < 300) { this._updateUploadToast(toastId, 95); resolve(); }
                             else reject(new Error(`S3 rejected upload (HTTP ${xhr.status}): ${xhr.responseText}`));
                         });
                         xhr.addEventListener('error', () => reject(new Error('Network error uploading to S3 — check CORS config.')));
@@ -285,24 +304,21 @@ document.addEventListener('alpine:init', () => {
                         }),
                     });
                     const result = await confirmResp.json();
-                    this.uploadProgress = 100;
                     if (result.html) {
                         const list = document.getElementById('file-list');
                         list.insertAdjacentHTML('afterbegin', result.html);
                         document.getElementById('empty-state')?.remove();
                     }
                     if (result.storage_used) this.storageUsed = result.storage_used;
+                    this._completeUploadToast(toastId);
 
                 } catch (err) {
-                    alert(`Upload failed for "${file.name}": ${err.message}`);
+                    this._failUploadToast(toastId, file.name);
                 }
                 done++;
-                await new Promise(r => setTimeout(r, 200));
+                await new Promise(r => setTimeout(r, 100));
             }
-            await new Promise(r => setTimeout(r, 400));
             this.uploading = false;
-            this.uploadProgress = 0;
-            this.uploadLabel = '';
         },
 
         async uploadFolder(event) {
@@ -311,8 +327,7 @@ document.addEventListener('alpine:init', () => {
             if (!files.length) return;
 
             this.uploading = true;
-            this.uploadLabel = 'Creating folders…';
-            this.uploadProgress = 0;
+            this.showToast('Creating folders…', 'info', 3000);
 
             // folderPkMap: relative path string → db pk
             // e.g. "myFolder" → 5, "myFolder/sub" → 7
@@ -363,8 +378,7 @@ document.addEventListener('alpine:init', () => {
                     const fileFolderPath = parts.slice(0, -1).join('/');
                     const folderPk       = fileFolderPath ? folderPkMap[fileFolderPath] : rootParentPk;
 
-                    this.uploadLabel    = `${file.name} (${done + 1}/${files.length})`;
-                    this.uploadProgress = 0;
+                    const toastId = this._addUploadToast(`${file.name} (${done + 1}/${files.length})`);
 
                     try {
                         const resp = await fetch('{% url "drive_upload_url" %}', {
@@ -384,10 +398,10 @@ document.addEventListener('alpine:init', () => {
                             xhr.open('POST', url);
                             xhr.upload.addEventListener('progress', (e) => {
                                 if (e.lengthComputable)
-                                    this.uploadProgress = Math.round((e.loaded / e.total) * 90);
+                                    this._updateUploadToast(toastId, Math.round((e.loaded / e.total) * 90));
                             });
                             xhr.addEventListener('load', () => {
-                                if (xhr.status >= 200 && xhr.status < 300) { this.uploadProgress = 95; resolve(); }
+                                if (xhr.status >= 200 && xhr.status < 300) { this._updateUploadToast(toastId, 95); resolve(); }
                                 else reject(new Error(`S3 upload failed (HTTP ${xhr.status})`));
                             });
                             xhr.addEventListener('error', () => reject(new Error('Network error uploading to S3.')));
@@ -400,11 +414,11 @@ document.addEventListener('alpine:init', () => {
                             body: JSON.stringify({ filename: file.name, s3_key, folder_pk: folderPk, storage_class: 'GLACIER_IR' }),
                         });
                         const result = await confirmResp.json();
-                        this.uploadProgress = 100;
                         if (result.storage_used) this.storageUsed = result.storage_used;
+                        this._completeUploadToast(toastId);
 
                     } catch (err) {
-                        alert(`Upload failed for "${file.name}": ${err.message}`);
+                        this._failUploadToast(toastId, file.name);
                     }
                     done++;
                     await new Promise(r => setTimeout(r, 100));
@@ -413,10 +427,7 @@ document.addEventListener('alpine:init', () => {
             } catch (err) {
                 alert(err.message);
             } finally {
-                await new Promise(r => setTimeout(r, 400));
-                this.uploading      = false;
-                this.uploadProgress = 0;
-                this.uploadLabel    = '';
+                this.uploading = false;
                 // Reload the file/folder list from the server so injected rows
                 // reflect the real DB state without a full page reload
                 fetch(window.location.href, { headers: { 'HX-Request': 'true' } })
@@ -761,22 +772,7 @@ document.addEventListener('alpine:init', () => {
             </div>
             {% endif %}{# /not is_archive_view and not is_recycle_bin #}
 
-            {# ── Upload progress bar ── #}
-            {% if not is_archive_view and not is_recycle_bin %}
-            <div x-show="uploading" x-cloak class="mb-5">
-                <div class="flex justify-between text-xs text-zinc-400 mb-1.5">
-                    <span class="truncate max-w-xs" x-text="uploadLabel"></span>
-                    <span x-text="`${uploadProgress}%`"></span>
-                </div>
-                <div class="w-full bg-zinc-700/60 rounded-full h-2 overflow-hidden">
-                    <div class="h-2 rounded-full transition-all duration-200 ease-out"
-                         :class="uploadProgress === 100 ? 'bg-green-500' : 'bg-sky-500'"
-                         :style="`width: ${uploadProgress}%`"></div>
-                </div>
-                <p class="text-xs text-zinc-500 mt-1.5">
-                    <span x-text="uploadProgress < 95 ? 'Uploading to S3…' : uploadProgress < 100 ? 'Saving…' : 'Done!'"></span>
-                </p>
-            </div>
+            {# Upload progress moved to toast stack — no inline bar needed #}
             {% endif %}{# /not is_archive_view #}
 
 
@@ -964,10 +960,10 @@ document.addEventListener('alpine:init', () => {
                                'text-red-100':   t.type === 'error',
                                'text-zinc-100':  t.type === 'progress',
                            }"
-                           x-text="t.type === 'progress' ? (t.done ? t.message + '.zip — ready!' : 'Zipping ' + t.message + '.zip…') : t.message"></p>
+                           x-text="t.type === 'progress' ? (t.done ? t.message + (t.jobId ? '.zip — ready!' : ' — done!') : (t.jobId ? 'Zipping ' + t.message + '.zip…' : 'Uploading ' + t.message + '…')) : t.message"></p>
                         <p x-show="t.type === 'progress' && !t.done"
                            class="text-xs text-zinc-500 mt-0.5"
-                           x-text="`${t.progress}% complete`"></p>
+                           x-text="t.progress > 0 ? `${t.progress}%${t.progress >= 95 ? ' — saving…' : ''}` : 'Starting…'"></p>
                     </div>
 
                     {# Close #}
