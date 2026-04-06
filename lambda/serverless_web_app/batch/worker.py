@@ -38,9 +38,14 @@ def _fetch_db_url():
 
 
 def _setup_django():
+    # worker.py lives at /app/batch/worker.py — add /app to sys.path so
+    # Django can find the 'config' and 'drive' packages.
+    app_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if app_root not in sys.path:
+        sys.path.insert(0, app_root)
+
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.prod")
     os.environ["DATABASE_URL"] = _fetch_db_url()
-    # Minimal settings overrides so Django doesn't complain about missing vars
     os.environ.setdefault("DJANGO_SECRET_KEY", "batch-worker-placeholder")
     os.environ.setdefault("ALLOWED_HOSTS", "*")
 
