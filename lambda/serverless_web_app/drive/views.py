@@ -27,6 +27,12 @@ from .models import DriveFile, DriveFolder, BatchJob
 
 
 # ---------------------------------------------------------------------------
+# Module-level cache — survives across Lambda invocations in the same container
+# ---------------------------------------------------------------------------
+_cf_private_key_cache = None
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -56,14 +62,19 @@ def _get_owner_sub(request):
 
 
 def _get_cloudfront_signed_url(s3_key, expires_seconds=300):
-    """Generate a CloudFront signed URL valid for expires_seconds."""
-    ssm = boto3.client("ssm", region_name=settings.AWS_REGION)
-    pem = ssm.get_parameter(
-        Name=settings.CLOUDFRONT_PRIVATE_KEY_SSM_NAME,
-        WithDecryption=True,
-    )["Parameter"]["Value"]
+    """Generate a CloudFront signed URL valid for expires_seconds.
+    Private key is cached in the module-level global so SSM is only hit
+    once per Lambda container (cold start), not on every request."""
+    global _cf_private_key_cache
+    if _cf_private_key_cache is None:
+        ssm = boto3.client("ssm", region_name=settings.AWS_REGION)
+        pem = ssm.get_parameter(
+            Name=settings.CLOUDFRONT_PRIVATE_KEY_SSM_NAME,
+            WithDecryption=True,
+        )["Parameter"]["Value"]
+        _cf_private_key_cache = serialization.load_pem_private_key(pem.encode(), password=None)
 
-    private_key = serialization.load_pem_private_key(pem.encode(), password=None)
+    private_key = _cf_private_key_cache
 
     def rsa_signer(message):
         return private_key.sign(message, padding.PKCS1v15(), hashes.SHA1())
@@ -359,6 +370,22 @@ def view_file(request, pk):
 
     signed_url = _get_cloudfront_signed_url(file.s3_key, expires_seconds=3600)
     return redirect(signed_url)
+
+
+@cognito_login_required
+def file_thumbnail(request, pk):
+    """Redirect to a 1-hour CloudFront signed URL for image/video thumbnails.
+    Browser caches the redirect for 1 hour so Lambda is only hit once per file
+    per session. Only serves image/* and video/* — returns 404 for everything else."""
+    file = get_object_or_404(DriveFile, pk=pk, owner_sub=_get_owner_sub(request))
+    if not (file.content_type.startswith("image/") or file.content_type.startswith("video/")):
+        return HttpResponse(status=404)
+    if file.is_archived() and file.restore_status != DriveFile.RESTORE_READY:
+        return HttpResponse(status=404)
+    signed_url = _get_cloudfront_signed_url(file.s3_key, expires_seconds=3600)
+    response = redirect(signed_url)
+    response["Cache-Control"] = "private, max-age=3600"
+    return response
 
 
 @cognito_login_required
