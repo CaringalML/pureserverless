@@ -1,10 +1,11 @@
 <div id="file-{{ file.pk }}"
      data-file-pk="{{ file.pk }}"
+     data-name="{{ file.name|escapejs }}"
      class="bg-[#13151c] border rounded-xl transition-all duration-100 cursor-pointer select-none overflow-hidden"
      :class="isSelected({{ file.pk }}) ? 'border-sky-500 bg-sky-500/5' : 'border-zinc-700/60 hover:border-zinc-500/60'"
      @click.stop="rowClick($event, {{ file.pk }})"
      @dblclick.stop="{% if not file.is_archived or file.restore_status == 'ready' %}openPreview({{ file.pk }}){% endif %}"
-     @contextmenu.stop="{% if not is_archive_view %}openCtx($event, {{ file.pk }}, {{ file.is_archived|yesno:'true,false' }}, '{{ file.restore_status }}', '{{ file.name|escapejs }}'){% endif %}">
+     @contextmenu.stop="{% if not is_archive_view %}openCtx($event, {{ file.pk }}, {{ file.is_archived|yesno:'true,false' }}, '{{ file.restore_status }}', $el.dataset.name){% endif %}">
 
     {# ── LIST view ── #}
     <div x-show="view === 'list'" class="flex items-center gap-4 px-5 py-3 pointer-events-none">

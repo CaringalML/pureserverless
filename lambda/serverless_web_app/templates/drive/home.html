@@ -167,6 +167,7 @@ document.addEventListener('alpine:init', () => {
                 const rowId = isFolder ? `folder-${pk}` : `file-${pk}`;
                 const row = document.getElementById(rowId);
                 if (row) {
+                    row.dataset.name = data.name;
                     row.querySelectorAll('p.font-medium.text-zinc-100').forEach(el => {
                         el.textContent = data.name;
                     });
