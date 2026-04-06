@@ -928,18 +928,24 @@ document.addEventListener('alpine:init', () => {
                         const label = totalSelected > 1 ? `${totalSelected} items` : ctx.name;
                         const ok = await showConfirm('Delete', `Move ${label} to Recycle Bin?`, 'Delete');
                         if(ok) {
-                            selectedFolders.forEach(fid => {
-                                htmx.ajax('POST', `/drive/folder/${fid}/delete/`, {
-                                    target: `#folder-${fid}`, swap: 'outerHTML',
+                            const folderIds = selectedFolders.length > 0 ? [...selectedFolders] : (ctx.isFolder ? [ctx.pk] : []);
+                            const fileIds   = selected.length > 0 ? [...selected] : (ctx.isFolder ? [] : [ctx.pk]);
+                            selected = []; selectedFolders = [];
+
+                            folderIds.forEach(fid => {
+                                fetch(`/drive/folder/${fid}/delete/`, {
+                                    method: 'POST',
                                     headers: {'X-CSRFToken': csrf()}
-                                });
+                                }).then(() => document.getElementById('folder-' + fid)?.remove())
+                                  .catch(err => alert('Delete failed: ' + err.message));
                             });
-                            const fileIds = selected.length > 0 ? selected : (ctx.isFolder ? [] : [ctx.pk]);
+
                             if(fileIds.length === 1) {
-                                htmx.ajax('POST', `/drive/delete/${fileIds[0]}/`, {
-                                    target: `#file-${fileIds[0]}`, swap: 'outerHTML',
+                                fetch(`/drive/delete/${fileIds[0]}/`, {
+                                    method: 'POST',
                                     headers: {'X-CSRFToken': csrf()}
-                                });
+                                }).then(() => document.getElementById('file-' + fileIds[0])?.remove())
+                                  .catch(err => alert('Delete failed: ' + err.message));
                             } else if(fileIds.length > 1) {
                                 fetch('{% url 'drive_bulk_delete' %}', {
                                     method: 'POST',
@@ -949,7 +955,6 @@ document.addEventListener('alpine:init', () => {
                                     data.deleted?.forEach(id => document.getElementById('file-' + id)?.remove());
                                 }).catch(err => alert('Delete failed: ' + err.message));
                             }
-                            selected = []; selectedFolders = [];
                         }
                     "
                     class="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-400 hover:bg-white/5 hover:text-red-300 transition-colors">
