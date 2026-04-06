@@ -52,7 +52,7 @@
     <p class="text-zinc-500 text-sm mt-1">{% if search_query %}Try a different search term{% else %}Deleted files will appear here for 30 days{% endif %}</p>
 </div>
 {% elif not is_archive_view and not is_recycle_bin and not files and not subfolders %}
-<div class="text-center bg-[#13151c] border border-zinc-700/60 rounded-xl py-20 mt-2">
+<div id="empty-state" class="text-center bg-[#13151c] border border-zinc-700/60 rounded-xl py-20 mt-2">
     <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 mx-auto mb-4 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
         <path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h3.586a1 1 0 01.707.293L10.414 6.5H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
     </svg>
