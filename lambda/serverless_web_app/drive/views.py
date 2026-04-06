@@ -273,6 +273,42 @@ def delete_folder(request, pk):
 
 @cognito_login_required
 @require_POST
+def rename_folder(request, pk):
+    """Rename a folder."""
+    owner_sub = _get_owner_sub(request)
+    folder = get_object_or_404(DriveFolder, pk=pk, owner_sub=owner_sub, deleted_at__isnull=True)
+    try:
+        data = json.loads(request.body)
+        name = data.get("name", "").strip()
+        if not name:
+            return JsonResponse({"error": "Name cannot be empty."}, status=400)
+        folder.name = name
+        folder.save(update_fields=["name"])
+        return JsonResponse({"id": folder.pk, "name": folder.name})
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@cognito_login_required
+@require_POST
+def rename_file(request, pk):
+    """Rename a file."""
+    owner_sub = _get_owner_sub(request)
+    file = get_object_or_404(DriveFile, pk=pk, owner_sub=owner_sub, deleted_at__isnull=True)
+    try:
+        data = json.loads(request.body)
+        name = data.get("name", "").strip()
+        if not name:
+            return JsonResponse({"error": "Name cannot be empty."}, status=400)
+        file.name = name
+        file.save(update_fields=["name"])
+        return JsonResponse({"id": file.pk, "name": file.name})
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=400)
+
+
+@cognito_login_required
+@require_POST
 def upload_url(request):
     """Return a presigned S3 POST URL — the browser uploads directly to S3."""
     try:
