@@ -907,11 +907,10 @@ document.addEventListener('alpine:init', () => {
     </div>
 
     {# ═══════════════════ PREVIEW MODAL ═══════════════════ #}
+    <template x-if="preview">
     <div x-show="preview"
-         x-cloak
          @keydown.escape.window="closePreview()"
-         class="fixed inset-0 z-50 flex flex-col bg-black/95"
-         style="display:none">
+         class="fixed inset-0 z-50 flex flex-col bg-black/95">
 
         {# Top bar #}
         <div class="flex items-center justify-between px-5 py-3 bg-[#0d0f14] border-b border-zinc-700/60 shrink-0">
@@ -1009,6 +1008,7 @@ document.addEventListener('alpine:init', () => {
             </template>
         </div>
     </div>{# /preview modal #}
+    </template>{# /x-if preview #}
 
     {# ═══════════════════ CONFIRM MODAL ═══════════════════ #}
     <div x-show="confirmModal.show" x-cloak

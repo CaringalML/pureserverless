@@ -730,7 +730,7 @@ def _send_archive_email(to_email, file_names):
 # Batch zip-folder
 # ---------------------------------------------------------------------------
 
-INLINE_ZIP_THRESHOLD = 50 * 1024 * 1024  # 50 MB — zip inline in Lambda below this
+INLINE_ZIP_THRESHOLD = 0  # Always use Batch — Lambda timeout too short for inline zipping
 
 
 def _collect_folder_files(folder_pk, owner_sub):
