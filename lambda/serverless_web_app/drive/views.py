@@ -85,6 +85,21 @@ def _get_owner_sub(request):
     return request.session.get("user_sub", "")
 
 
+def _get_s3_user_prefix(request):
+    """Return a human-readable S3 key prefix derived from the user's email.
+
+    e.g.  lawrencecaringal5@gmail.com  →  lawrencecaringal5
+    Falls back to the Cognito sub if the email is unavailable.
+    """
+    email = request.session.get("user_email", "")
+    if email and "@" in email:
+        username = email.split("@")[0]
+        safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in username).strip("_")
+        if safe:
+            return safe
+    return _get_owner_sub(request)
+
+
 def _get_cloudfront_signed_url(s3_key, expires_seconds=300):
     """Generate a CloudFront signed URL valid for expires_seconds.
     Private key is cached in the module-level global so SSM is only hit
@@ -283,13 +298,14 @@ def upload_url(request):
         filename     = data.get("filename", "unnamed")
         content_type = data.get("content_type", "application/octet-stream")
         owner_sub    = _get_owner_sub(request)
+        user_prefix  = _get_s3_user_prefix(request)
         folder_pk    = data.get("folder_pk")
 
         folder_path = _get_folder_path(folder_pk, owner_sub)
         if folder_path:
-            s3_key = f"{owner_sub}/{folder_path}/{uuid.uuid4()}/{filename}"
+            s3_key = f"{user_prefix}/{folder_path}/{uuid.uuid4()}/{filename}"
         else:
-            s3_key = f"{owner_sub}/{uuid.uuid4()}/{filename}"
+            s3_key = f"{user_prefix}/{uuid.uuid4()}/{filename}"
 
         presigned = _s3().generate_presigned_post(
             Bucket=settings.DRIVE_BUCKET_NAME,
