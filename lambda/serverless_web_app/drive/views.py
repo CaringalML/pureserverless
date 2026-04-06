@@ -514,9 +514,18 @@ def recycle_bin(request):
         bin_files = bin_files.filter(name__icontains=q)
         bin_folders = bin_folders.filter(name__icontains=q)
 
+    # Annotate each deleted folder with its subtree content counts
+    bin_folders_list = list(bin_folders)
+    for folder in bin_folders_list:
+        folder_ids = _collect_folder_ids(folder)
+        folder.file_count = DriveFile.objects.filter(
+            folder_id__in=folder_ids, deleted_at__isnull=True
+        ).count()
+        folder.subfolder_count = len(folder_ids) - 1
+
     ctx = {
         "files": bin_files,
-        "bin_folders": bin_folders,
+        "bin_folders": bin_folders_list,
         "subfolders": [],
         "current_folder": None,
         "breadcrumbs": [],
