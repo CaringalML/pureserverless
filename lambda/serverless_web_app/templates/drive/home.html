@@ -273,8 +273,9 @@ document.addEventListener('alpine:init', () => {
         },
 
         // Upload a single file, update its toast, inject its row when done.
+        // injectRow=false skips DOM injection (used by uploadFolder — final reload handles it).
         // Returns true on success, false on failure never throws.
-        async _uploadOne(file, folderPk, toastId) {
+        async _uploadOne(file, folderPk, toastId, injectRow = true) {
             try {
                 const resp = await fetch('{% url "drive_upload_url" %}', {
                     method: 'POST',
@@ -325,7 +326,7 @@ document.addEventListener('alpine:init', () => {
                     body: JSON.stringify({ filename: file.name, s3_key, folder_pk: folderPk, storage_class: 'GLACIER_IR' }),
                 });
                 const result = await confirmResp.json();
-                if (result.html) {
+                if (result.html && injectRow) {
                     if (result.overwritten) {
                         const existing = document.getElementById('file-' + result.id);
                         if (existing) existing.outerHTML = result.html;
@@ -424,7 +425,7 @@ document.addEventListener('alpine:init', () => {
                     const fileFolderPath = parts.slice(0, -1).join('/');
                     const folderPk       = fileFolderPath ? folderPkMap[fileFolderPath] : rootParentPk;
                     const toastId        = this._addUploadToast(`${file.name} (${idx + 1}/${files.length})`);
-                    return this._uploadOne(file, folderPk, toastId);
+                    return this._uploadOne(file, folderPk, toastId, false);
                 });
                 await this._runConcurrent(fileTasks, 5);
 
