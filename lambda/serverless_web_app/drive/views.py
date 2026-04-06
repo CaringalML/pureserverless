@@ -271,10 +271,21 @@ def delete_folder(request, pk):
     return HttpResponse("")
 
 
+def _s3_move(s3, old_key, new_key):
+    """Copy an S3 object to a new key then delete the original."""
+    s3.copy_object(
+        Bucket=settings.DRIVE_BUCKET_NAME,
+        CopySource={"Bucket": settings.DRIVE_BUCKET_NAME, "Key": old_key},
+        Key=new_key,
+        MetadataDirective="COPY",
+    )
+    s3.delete_object(Bucket=settings.DRIVE_BUCKET_NAME, Key=old_key)
+
+
 @cognito_login_required
 @require_POST
 def rename_folder(request, pk):
-    """Rename a folder."""
+    """Rename a folder and move all files in its subtree to new S3 keys."""
     owner_sub = _get_owner_sub(request)
     folder = get_object_or_404(DriveFolder, pk=pk, owner_sub=owner_sub, deleted_at__isnull=True)
     try:
@@ -282,8 +293,34 @@ def rename_folder(request, pk):
         name = data.get("name", "").strip()
         if not name:
             return JsonResponse({"error": "Name cannot be empty."}, status=400)
+
+        # Compute old path BEFORE renaming
+        old_path = _get_folder_path(pk, owner_sub)  # e.g. "photos/vacation"
+        old_prefix = f"{owner_sub}/{old_path}/" if old_path else f"{owner_sub}/"
+
+        # Rename in DB
         folder.name = name
         folder.save(update_fields=["name"])
+
+        # Compute new path AFTER renaming
+        new_path = _get_folder_path(pk, owner_sub)
+        new_prefix = f"{owner_sub}/{new_path}/" if new_path else f"{owner_sub}/"
+
+        # Move all files in the subtree to new S3 keys
+        if old_prefix != new_prefix:
+            s3 = _s3()
+            all_folder_ids = _collect_folder_ids(folder)
+            files = DriveFile.objects.filter(folder_id__in=all_folder_ids, owner_sub=owner_sub)
+            for f in files:
+                if f.s3_key.startswith(old_prefix):
+                    new_key = new_prefix + f.s3_key[len(old_prefix):]
+                    try:
+                        _s3_move(s3, f.s3_key, new_key)
+                        f.s3_key = new_key
+                        f.save(update_fields=["s3_key"])
+                    except ClientError as e:
+                        logger.error("S3 move failed %s → %s: %s", f.s3_key, new_key, e)
+
         return JsonResponse({"id": folder.pk, "name": folder.name})
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
@@ -292,7 +329,7 @@ def rename_folder(request, pk):
 @cognito_login_required
 @require_POST
 def rename_file(request, pk):
-    """Rename a file."""
+    """Rename a file and move it to the new S3 key."""
     owner_sub = _get_owner_sub(request)
     file = get_object_or_404(DriveFile, pk=pk, owner_sub=owner_sub, deleted_at__isnull=True)
     try:
@@ -300,8 +337,21 @@ def rename_file(request, pk):
         name = data.get("name", "").strip()
         if not name:
             return JsonResponse({"error": "Name cannot be empty."}, status=400)
+
+        # Build new S3 key — same directory, new filename
+        old_key = file.s3_key
+        directory = old_key.rsplit("/", 1)[0] if "/" in old_key else owner_sub
+        new_key = f"{directory}/{name}"
+
+        if old_key != new_key:
+            try:
+                _s3_move(_s3(), old_key, new_key)
+                file.s3_key = new_key
+            except ClientError as e:
+                logger.error("S3 move failed %s → %s: %s", old_key, new_key, e)
+
         file.name = name
-        file.save(update_fields=["name"])
+        file.save(update_fields=["name", "s3_key"])
         return JsonResponse({"id": file.pk, "name": file.name})
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
