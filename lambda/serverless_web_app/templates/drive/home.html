@@ -260,64 +260,78 @@ document.addEventListener('alpine:init', () => {
             setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 6000);
         },
 
+        // Upload a single file, update its toast, inject its row when done.
+        // Returns true on success, false on failure — never throws.
+        async _uploadOne(file, folderPk, toastId) {
+            try {
+                const resp = await fetch('{% url "drive_upload_url" %}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
+                    body: JSON.stringify({ filename: file.name, content_type: file.type || 'application/octet-stream' }),
+                });
+                if (!resp.ok) throw new Error(`Upload URL failed (HTTP ${resp.status})`);
+                const { url, fields, s3_key, error } = await resp.json();
+                if (error) throw new Error(error);
+
+                await new Promise((resolve, reject) => {
+                    const form = new FormData();
+                    Object.entries(fields).forEach(([k, v]) => form.append(k, v));
+                    form.append('file', file);
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', url);
+                    xhr.upload.addEventListener('progress', (e) => {
+                        if (e.lengthComputable)
+                            this._updateUploadToast(toastId, Math.round((e.loaded / e.total) * 90));
+                    });
+                    xhr.addEventListener('load', () => {
+                        if (xhr.status >= 200 && xhr.status < 300) { this._updateUploadToast(toastId, 95); resolve(); }
+                        else reject(new Error(`S3 rejected upload (HTTP ${xhr.status})`));
+                    });
+                    xhr.addEventListener('error', () => reject(new Error('Network error — check CORS config.')));
+                    xhr.send(form);
+                });
+
+                const confirmResp = await fetch('{% url "drive_confirm" %}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
+                    body: JSON.stringify({ filename: file.name, s3_key, folder_pk: folderPk, storage_class: 'GLACIER_IR' }),
+                });
+                const result = await confirmResp.json();
+                if (result.html) {
+                    const list = document.getElementById('file-list');
+                    if (list) { list.insertAdjacentHTML('afterbegin', result.html); document.getElementById('empty-state')?.remove(); }
+                }
+                if (result.storage_used) this.storageUsed = result.storage_used;
+                this._completeUploadToast(toastId);
+                return true;
+            } catch (err) {
+                this._failUploadToast(toastId, file.name);
+                return false;
+            }
+        },
+
+        // Run an array of async task functions with at most `concurrency` running simultaneously.
+        async _runConcurrent(tasks, concurrency = 5) {
+            const results = [];
+            let i = 0;
+            const run = async () => {
+                while (i < tasks.length) {
+                    const idx = i++;
+                    results[idx] = await tasks[idx]();
+                }
+            };
+            await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, run));
+            return results;
+        },
+
         async uploadFiles(files) {
             this.uploading = true;
-            let done = 0;
-            for (const file of files) {
+            const folderPk = {{ current_folder.pk|default:'null' }};
+            const tasks = files.map(file => () => {
                 const toastId = this._addUploadToast(file.name);
-                try {
-                    const resp = await fetch('{% url "drive_upload_url" %}', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
-                        body: JSON.stringify({ filename: file.name, content_type: file.type || 'application/octet-stream' }),
-                    });
-                    if (!resp.ok) throw new Error(`Failed to get upload URL (HTTP ${resp.status})`);
-                    const { url, fields, s3_key, error } = await resp.json();
-                    if (error) throw new Error('Server error: ' + error);
-
-                    await new Promise((resolve, reject) => {
-                        const form = new FormData();
-                        Object.entries(fields).forEach(([k, v]) => form.append(k, v));
-                        form.append('file', file);
-                        const xhr = new XMLHttpRequest();
-                        xhr.open('POST', url);
-                        xhr.upload.addEventListener('progress', (e) => {
-                            if (e.lengthComputable)
-                                this._updateUploadToast(toastId, Math.round((e.loaded / e.total) * 90));
-                        });
-                        xhr.addEventListener('load', () => {
-                            if (xhr.status >= 200 && xhr.status < 300) { this._updateUploadToast(toastId, 95); resolve(); }
-                            else reject(new Error(`S3 rejected upload (HTTP ${xhr.status}): ${xhr.responseText}`));
-                        });
-                        xhr.addEventListener('error', () => reject(new Error('Network error uploading to S3 — check CORS config.')));
-                        xhr.send(form);
-                    });
-
-                    const confirmResp = await fetch('{% url "drive_confirm" %}', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
-                        body: JSON.stringify({
-                            filename: file.name,
-                            s3_key,
-                            folder_pk: {{ current_folder.pk|default:'null' }},
-                            storage_class: 'GLACIER_IR',
-                        }),
-                    });
-                    const result = await confirmResp.json();
-                    if (result.html) {
-                        const list = document.getElementById('file-list');
-                        list.insertAdjacentHTML('afterbegin', result.html);
-                        document.getElementById('empty-state')?.remove();
-                    }
-                    if (result.storage_used) this.storageUsed = result.storage_used;
-                    this._completeUploadToast(toastId);
-
-                } catch (err) {
-                    this._failUploadToast(toastId, file.name);
-                }
-                done++;
-                await new Promise(r => setTimeout(r, 100));
-            }
+                return this._uploadOne(file, folderPk, toastId);
+            });
+            await this._runConcurrent(tasks, 5);
             this.uploading = false;
         },
 
@@ -371,58 +385,15 @@ document.addEventListener('alpine:init', () => {
                     }
                 }
 
-                // Upload every file into its correct folder
-                let done = 0;
-                for (const file of files) {
+                // Upload all files in parallel (5 at a time), each to its correct folder
+                const fileTasks = files.map((file, idx) => () => {
                     const parts          = file.webkitRelativePath.split('/');
                     const fileFolderPath = parts.slice(0, -1).join('/');
                     const folderPk       = fileFolderPath ? folderPkMap[fileFolderPath] : rootParentPk;
-
-                    const toastId = this._addUploadToast(`${file.name} (${done + 1}/${files.length})`);
-
-                    try {
-                        const resp = await fetch('{% url "drive_upload_url" %}', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
-                            body: JSON.stringify({ filename: file.name, content_type: file.type || 'application/octet-stream' }),
-                        });
-                        if (!resp.ok) throw new Error(`Failed to get upload URL (HTTP ${resp.status})`);
-                        const { url, fields, s3_key, error } = await resp.json();
-                        if (error) throw new Error('Server error: ' + error);
-
-                        await new Promise((resolve, reject) => {
-                            const form = new FormData();
-                            Object.entries(fields).forEach(([k, v]) => form.append(k, v));
-                            form.append('file', file);
-                            const xhr = new XMLHttpRequest();
-                            xhr.open('POST', url);
-                            xhr.upload.addEventListener('progress', (e) => {
-                                if (e.lengthComputable)
-                                    this._updateUploadToast(toastId, Math.round((e.loaded / e.total) * 90));
-                            });
-                            xhr.addEventListener('load', () => {
-                                if (xhr.status >= 200 && xhr.status < 300) { this._updateUploadToast(toastId, 95); resolve(); }
-                                else reject(new Error(`S3 upload failed (HTTP ${xhr.status})`));
-                            });
-                            xhr.addEventListener('error', () => reject(new Error('Network error uploading to S3.')));
-                            xhr.send(form);
-                        });
-
-                        const confirmResp = await fetch('{% url "drive_confirm" %}', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.csrf() },
-                            body: JSON.stringify({ filename: file.name, s3_key, folder_pk: folderPk, storage_class: 'GLACIER_IR' }),
-                        });
-                        const result = await confirmResp.json();
-                        if (result.storage_used) this.storageUsed = result.storage_used;
-                        this._completeUploadToast(toastId);
-
-                    } catch (err) {
-                        this._failUploadToast(toastId, file.name);
-                    }
-                    done++;
-                    await new Promise(r => setTimeout(r, 100));
-                }
+                    const toastId        = this._addUploadToast(`${file.name} (${idx + 1}/${files.length})`);
+                    return this._uploadOne(file, folderPk, toastId);
+                });
+                await this._runConcurrent(fileTasks, 5);
 
             } catch (err) {
                 alert(err.message);
