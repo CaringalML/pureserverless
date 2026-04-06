@@ -126,7 +126,7 @@ def drive_home(request, folder_pk=None):
         current_folder = get_object_or_404(DriveFolder, pk=folder_pk, owner_sub=owner_sub)
         breadcrumbs = _build_breadcrumbs(current_folder)
 
-    from django.db.models import Q
+    from django.db.models import Q, Prefetch
     now = datetime.datetime.now(datetime.timezone.utc)
 
     # Expire any restored files whose 7-day window has passed — reset back to archived
@@ -149,7 +149,7 @@ def drive_home(request, folder_pk=None):
         Q(storage_class__in=(DriveFile.GLACIER_IR, DriveFile.STANDARD, DriveFile.STANDARD_IA))
         | Q(storage_class__in=(DriveFile.GLACIER, DriveFile.DEEP_ARCHIVE), restore_status=DriveFile.RESTORE_READY)
     )
-    subfolders = DriveFolder.objects.filter(owner_sub=owner_sub, parent=current_folder)
+    subfolders = DriveFolder.objects.filter(owner_sub=owner_sub, parent=current_folder, deleted_at__isnull=True)
 
     if q:
         files = files.filter(name__icontains=q)
@@ -166,9 +166,14 @@ def drive_home(request, folder_pk=None):
     if request.headers.get("HX-Request"):
         return render(request, "drive/partials/search_results.html", ctx)
 
+    active_subfolders = DriveFolder.objects.filter(deleted_at__isnull=True)
     ctx["sidebar_folders"] = DriveFolder.objects.filter(
-        owner_sub=owner_sub, parent=None
-    ).prefetch_related('subfolders', 'subfolders__subfolders', 'subfolders__subfolders__subfolders')
+        owner_sub=owner_sub, parent=None, deleted_at__isnull=True
+    ).prefetch_related(
+        Prefetch('subfolders', queryset=active_subfolders),
+        Prefetch('subfolders__subfolders', queryset=active_subfolders),
+        Prefetch('subfolders__subfolders__subfolders', queryset=active_subfolders),
+    )
     _, ctx["storage_used"], ctx["storage_pct"] = _storage_stats(owner_sub)
     ctx["total_files"] = DriveFile.objects.filter(owner_sub=owner_sub, deleted_at__isnull=True).count()
 
@@ -206,36 +211,29 @@ def create_folder(request):
         return JsonResponse({"error": str(e)}, status=400)
 
 
+def _collect_folder_ids(root):
+    """Iteratively walk the folder subtree and return a list of all folder PKs."""
+    ids = []
+    queue = [root]
+    visited = set()
+    while queue:
+        f = queue.pop()
+        if f.pk in visited:
+            continue
+        visited.add(f.pk)
+        ids.append(f.pk)
+        queue.extend(f.subfolders.all())
+    return ids
+
+
 @cognito_login_required
 @require_POST
 def delete_folder(request, pk):
-    """Delete a folder (CASCADE removes all sub-folders; files are unlinked via SET_NULL then deleted)."""
+    """Soft-delete a folder — moves it to Recycle Bin. Files inside stay linked to the folder."""
     owner_sub = _get_owner_sub(request)
-    folder = get_object_or_404(DriveFolder, pk=pk, owner_sub=owner_sub)
-
-    # Collect all folder IDs in the subtree iteratively to avoid recursion stack
-    # overflow on deep nesting and to guard against circular parent references.
-    def _collect_folder_ids(root):
-        ids = []
-        queue = [root]
-        visited = set()
-        while queue:
-            f = queue.pop()
-            if f.pk in visited:
-                continue
-            visited.add(f.pk)
-            ids.append(f.pk)
-            queue.extend(f.subfolders.all())
-        return ids
-
-    folder_ids = _collect_folder_ids(folder)
-    # Soft-delete all files in the subtree — they go to Recycle Bin
-    now = datetime.datetime.now(datetime.timezone.utc)
-    DriveFile.objects.filter(
-        owner_sub=owner_sub, folder_id__in=folder_ids, deleted_at__isnull=True
-    ).update(deleted_at=now, folder=None)
-
-    folder.delete()  # CASCADE removes sub-folders from DB
+    folder = get_object_or_404(DriveFolder, pk=pk, owner_sub=owner_sub, deleted_at__isnull=True)
+    folder.deleted_at = datetime.datetime.now(datetime.timezone.utc)
+    folder.save(update_fields=['deleted_at'])
     return HttpResponse("")
 
 
@@ -406,26 +404,39 @@ def restore_from_bin(request, pk):
 
 @cognito_login_required
 @require_POST
+def restore_folder_from_bin(request, pk):
+    """Restore a folder from the Recycle Bin back to My Drive."""
+    folder = get_object_or_404(DriveFolder, pk=pk, owner_sub=_get_owner_sub(request), deleted_at__isnull=False)
+    folder.deleted_at = None
+    folder.save(update_fields=['deleted_at'])
+    return JsonResponse({"restored": True})
+
+
+@cognito_login_required
+@require_POST
 def bulk_bin_restore(request):
-    """Restore multiple files from the Recycle Bin back to My Drive."""
+    """Restore multiple files and/or folders from the Recycle Bin back to My Drive."""
     data = json.loads(request.body)
-    file_ids = data.get("ids", [])
+    file_ids = data.get("file_ids", [])
+    folder_ids = data.get("folder_ids", [])
     owner_sub = _get_owner_sub(request)
-    files = DriveFile.objects.filter(pk__in=file_ids, owner_sub=owner_sub, deleted_at__isnull=False)
-    files.update(deleted_at=None)
-    return JsonResponse({"restored": list(file_ids)})
+    DriveFile.objects.filter(pk__in=file_ids, owner_sub=owner_sub, deleted_at__isnull=False).update(deleted_at=None)
+    DriveFolder.objects.filter(pk__in=folder_ids, owner_sub=owner_sub, deleted_at__isnull=False).update(deleted_at=None)
+    return JsonResponse({"restored_files": list(file_ids), "restored_folders": list(folder_ids)})
 
 
 @cognito_login_required
 @require_POST
 def bulk_bin_delete(request):
-    """Permanently delete multiple files from S3 and DB."""
+    """Permanently delete multiple files and/or folders from S3 and DB."""
     data = json.loads(request.body)
-    file_ids = data.get("ids", [])
+    file_ids = data.get("file_ids", [])
+    folder_ids = data.get("folder_ids", [])
     owner_sub = _get_owner_sub(request)
-    files = list(DriveFile.objects.filter(pk__in=file_ids, owner_sub=owner_sub, deleted_at__isnull=False))
     s3 = _s3()
-    deleted_ids = []
+
+    deleted_file_ids = []
+    files = list(DriveFile.objects.filter(pk__in=file_ids, owner_sub=owner_sub, deleted_at__isnull=False))
     for f in files:
         pk = f.pk
         try:
@@ -433,8 +444,24 @@ def bulk_bin_delete(request):
         except ClientError:
             pass
         f.delete()
-        deleted_ids.append(pk)
-    return JsonResponse({"deleted": deleted_ids})
+        deleted_file_ids.append(pk)
+
+    deleted_folder_ids = []
+    folders = list(DriveFolder.objects.filter(pk__in=folder_ids, owner_sub=owner_sub, deleted_at__isnull=False))
+    for folder in folders:
+        fid = folder.pk
+        all_folder_ids = _collect_folder_ids(folder)
+        files_inside = DriveFile.objects.filter(folder_id__in=all_folder_ids, owner_sub=owner_sub)
+        for f in files_inside:
+            try:
+                s3.delete_object(Bucket=settings.DRIVE_BUCKET_NAME, Key=f.s3_key)
+            except ClientError:
+                pass
+        files_inside.delete()
+        folder.delete()  # CASCADE removes subfolders
+        deleted_folder_ids.append(fid)
+
+    return JsonResponse({"deleted_files": deleted_file_ids, "deleted_folders": deleted_folder_ids})
 
 
 @cognito_login_required
@@ -452,27 +479,44 @@ def permanent_delete(request, pk):
 
 @cognito_login_required
 def recycle_bin(request):
-    """Show all soft-deleted files within the 30-day window."""
+    """Show all soft-deleted files and folders within the 30-day window."""
     owner_sub = _get_owner_sub(request)
-    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=30)
+    now = datetime.datetime.now(datetime.timezone.utc)
+    cutoff = now - datetime.timedelta(days=30)
 
-    # Auto-permanently-delete files whose 30-day window has expired
-    expired = DriveFile.objects.filter(owner_sub=owner_sub, deleted_at__lt=cutoff)
+    # Auto-permanently-delete expired files
+    expired_files = DriveFile.objects.filter(owner_sub=owner_sub, deleted_at__lt=cutoff)
     s3 = _s3()
-    for f in expired:
+    for f in expired_files:
         try:
             s3.delete_object(Bucket=settings.DRIVE_BUCKET_NAME, Key=f.s3_key)
         except ClientError:
             pass
-    expired.delete()
+    expired_files.delete()
+
+    # Auto-permanently-delete expired folders (and all files inside their subtree)
+    expired_folders = DriveFolder.objects.filter(owner_sub=owner_sub, deleted_at__isnull=False, deleted_at__lt=cutoff)
+    for folder in expired_folders:
+        folder_ids = _collect_folder_ids(folder)
+        files_inside = DriveFile.objects.filter(folder_id__in=folder_ids, owner_sub=owner_sub)
+        for f in files_inside:
+            try:
+                s3.delete_object(Bucket=settings.DRIVE_BUCKET_NAME, Key=f.s3_key)
+            except ClientError:
+                pass
+        files_inside.delete()
+        folder.delete()  # CASCADE removes subfolders
 
     q = request.GET.get("q", "").strip()
     bin_files = DriveFile.objects.filter(owner_sub=owner_sub, deleted_at__isnull=False)
+    bin_folders = DriveFolder.objects.filter(owner_sub=owner_sub, deleted_at__isnull=False)
     if q:
         bin_files = bin_files.filter(name__icontains=q)
+        bin_folders = bin_folders.filter(name__icontains=q)
 
     ctx = {
         "files": bin_files,
+        "bin_folders": bin_folders,
         "subfolders": [],
         "current_folder": None,
         "breadcrumbs": [],
@@ -483,9 +527,15 @@ def recycle_bin(request):
     if request.headers.get("HX-Request"):
         return render(request, "drive/partials/search_results.html", ctx)
 
+    from django.db.models import Prefetch
+    active_subfolders = DriveFolder.objects.filter(deleted_at__isnull=True)
     ctx["sidebar_folders"] = DriveFolder.objects.filter(
-        owner_sub=owner_sub, parent=None
-    ).prefetch_related('subfolders', 'subfolders__subfolders', 'subfolders__subfolders__subfolders')
+        owner_sub=owner_sub, parent=None, deleted_at__isnull=True
+    ).prefetch_related(
+        Prefetch('subfolders', queryset=active_subfolders),
+        Prefetch('subfolders__subfolders', queryset=active_subfolders),
+        Prefetch('subfolders__subfolders__subfolders', queryset=active_subfolders),
+    )
     _, ctx["storage_used"], ctx["storage_pct"] = _storage_stats(owner_sub)
     ctx["total_files"] = DriveFile.objects.filter(owner_sub=owner_sub, deleted_at__isnull=True).count()
 
@@ -561,9 +611,15 @@ def archive_view(request):
     if request.headers.get("HX-Request"):
         return render(request, "drive/partials/search_results.html", ctx)
 
+    from django.db.models import Prefetch as _Prefetch
+    _active_subfolders = DriveFolder.objects.filter(deleted_at__isnull=True)
     ctx["sidebar_folders"] = DriveFolder.objects.filter(
-        owner_sub=owner_sub, parent=None
-    ).prefetch_related('subfolders', 'subfolders__subfolders', 'subfolders__subfolders__subfolders')
+        owner_sub=owner_sub, parent=None, deleted_at__isnull=True
+    ).prefetch_related(
+        _Prefetch('subfolders', queryset=_active_subfolders),
+        _Prefetch('subfolders__subfolders', queryset=_active_subfolders),
+        _Prefetch('subfolders__subfolders__subfolders', queryset=_active_subfolders),
+    )
     _, ctx["storage_used"], ctx["storage_pct"] = _storage_stats(owner_sub)
     ctx["total_files"] = DriveFile.objects.filter(owner_sub=owner_sub, deleted_at__isnull=True).count()
 
@@ -783,7 +839,7 @@ def _collect_folder_files(folder_pk, owner_sub):
             continue
         visited.add(fk)
 
-        for sf in DriveFolder.objects.filter(parent_id=fk, owner_sub=owner_sub):
+        for sf in DriveFolder.objects.filter(parent_id=fk, owner_sub=owner_sub, deleted_at__isnull=True):
             child_prefix = f"{prefix}/{sf.name}" if prefix else sf.name
             queue.append((sf.pk, child_prefix))
 
@@ -811,7 +867,7 @@ def _folder_total_size(folder_pk, owner_sub):
         visited.add(fk)
         folder_pks.append(fk)
         queue.extend(
-            DriveFolder.objects.filter(parent_id=fk, owner_sub=owner_sub)
+            DriveFolder.objects.filter(parent_id=fk, owner_sub=owner_sub, deleted_at__isnull=True)
                         .values_list("pk", flat=True)
         )
 
@@ -861,7 +917,7 @@ def zip_folder(request, pk=None):
     if not folder_ids:
         return JsonResponse({"error": "No folders specified"}, status=400)
 
-    folders = list(DriveFolder.objects.filter(pk__in=folder_ids, owner_sub=owner_sub))
+    folders = list(DriveFolder.objects.filter(pk__in=folder_ids, owner_sub=owner_sub, deleted_at__isnull=True))
     if len(folders) != len(folder_ids):
         return JsonResponse({"error": "One or more folders not found"}, status=404)
 

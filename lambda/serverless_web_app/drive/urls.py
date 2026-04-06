@@ -20,6 +20,7 @@ urlpatterns = [
     path("bin/",                          views.recycle_bin,        name="drive_bin"),
     path("bin/<int:pk>/restore/",         views.restore_from_bin,   name="drive_bin_restore"),
     path("bin/<int:pk>/delete/",          views.permanent_delete,   name="drive_bin_delete"),
+    path("bin/folder/<int:pk>/restore/",   views.restore_folder_from_bin, name="drive_bin_folder_restore"),
     path("bin/bulk-restore/",             views.bulk_bin_restore,   name="drive_bin_bulk_restore"),
     path("bin/bulk-delete/",              views.bulk_bin_delete,    name="drive_bin_bulk_delete"),
     path("folder/<int:pk>/zip/",          views.zip_folder,         name="drive_zip_folder"),

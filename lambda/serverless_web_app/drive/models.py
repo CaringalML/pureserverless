@@ -10,6 +10,7 @@ class DriveFolder(models.Model):
         on_delete=models.CASCADE, related_name='subfolders',
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    deleted_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
     class Meta:
         ordering = ['name']
@@ -21,6 +22,14 @@ class DriveFolder(models.Model):
 
     def __str__(self):
         return self.name
+
+    def days_until_permanent_delete(self):
+        if not self.deleted_at:
+            return None
+        import datetime
+        expires = self.deleted_at + datetime.timedelta(days=30)
+        remaining = (expires - datetime.datetime.now(datetime.timezone.utc)).days
+        return max(remaining, 0)
 
 
 class DriveFile(models.Model):
