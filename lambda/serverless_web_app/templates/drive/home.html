@@ -72,7 +72,7 @@ document.addEventListener('alpine:init', () => {
             try {
                 const r = await fetch(`/drive/folder/${pk}/zip/`, {
                     method: 'POST',
-                    headers: { 'X-CSRFToken': csrf() },
+                    headers: { 'X-CSRFToken': this.csrf() },
                 });
                 let data;
                 try {
