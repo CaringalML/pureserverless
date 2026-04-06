@@ -427,12 +427,13 @@ def bulk_bin_delete(request):
     s3 = _s3()
     deleted_ids = []
     for f in files:
+        pk = f.pk
         try:
             s3.delete_object(Bucket=settings.DRIVE_BUCKET_NAME, Key=f.s3_key)
         except ClientError:
             pass
         f.delete()
-        deleted_ids.append(f.pk)
+        deleted_ids.append(pk)
     return JsonResponse({"deleted": deleted_ids})
 
 
