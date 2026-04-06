@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% block title %}NovaDrive{% endblock %}
 
-{# Hide the entire navbar on the drive page — branding lives in the sidebar #}
+{# Hide the entire navbar on the drive page branding lives in the sidebar #}
 {% block navbar %}{% endblock %}
 
-{# Full-bleed layout — sidebar + main content side by side #}
+{# Full-bleed layout sidebar + main content side by side #}
 {% block main_class %}flex-1 flex overflow-hidden{% endblock %}
 
 {% block content %}
@@ -65,7 +65,7 @@ document.addEventListener('alpine:init', () => {
             }, 6000);
         },
 
-        /* ── zip polling — one timer per job ── */
+        /* ── zip polling one timer per job ── */
         _zipPollers: {},
         startZipPoll(jobId, folderName, toastId) {
             if (this._zipPollers[jobId]) return;
@@ -261,7 +261,7 @@ document.addEventListener('alpine:init', () => {
         },
 
         // Upload a single file, update its toast, inject its row when done.
-        // Returns true on success, false on failure — never throws.
+        // Returns true on success, false on failure never throws.
         async _uploadOne(file, folderPk, toastId) {
             try {
                 const resp = await fetch('{% url "drive_upload_url" %}', {
@@ -287,7 +287,7 @@ document.addEventListener('alpine:init', () => {
                         if (xhr.status >= 200 && xhr.status < 300) { this._updateUploadToast(toastId, 95); resolve(); }
                         else reject(new Error(`S3 rejected upload (HTTP ${xhr.status})`));
                     });
-                    xhr.addEventListener('error', () => reject(new Error('Network error — check CORS config.')));
+                    xhr.addEventListener('error', () => reject(new Error('Network error check CORS config.')));
                     xhr.send(form);
                 });
 
@@ -484,7 +484,7 @@ document.addEventListener('alpine:init', () => {
                 Recycle Bin
             </a>
 
-            {# Folder tree — VSCode-style collapsible #}
+            {# Folder tree VSCode-style collapsible #}
             {% for sf in sidebar_folders %}
                 {% with folder=sf depth=0 %}
                     {% include "drive/partials/sidebar_folder.html" %}
@@ -502,7 +502,7 @@ document.addEventListener('alpine:init', () => {
                 <span class="text-[11px] text-zinc-500 font-medium uppercase tracking-wide">Files</span>
                 <span class="text-[11px] text-zinc-400 font-medium">{{ files|length }}</span>
             </div>
-            {# Selected count — Alpine driven, only shown when > 0 #}
+            {# Selected count Alpine driven, only shown when > 0 #}
             <div x-show="selected.length + selectedFolders.length > 0" x-cloak class="flex items-center justify-between">
                 <span class="text-[11px] text-sky-400 font-medium uppercase tracking-wide"
                       x-text="`${selected.length + selectedFolders.length} selected`"></span>
@@ -535,7 +535,7 @@ document.addEventListener('alpine:init', () => {
                 </svg>
             </button>
 
-            {# Dropdown — pops upward #}
+            {# Dropdown pops upward #}
             <div x-show="open" x-cloak
                  x-transition:enter="transition ease-out duration-150"
                  x-transition:enter-start="opacity-0 scale-95 translate-y-1"
@@ -577,7 +577,7 @@ document.addEventListener('alpine:init', () => {
             </div>
             <p class="text-sm text-zinc-500 mb-4">Files archived to Glacier Deep Archive. Retrieval takes 12–48 hours.</p>
 
-            {# ── Bulk restore toolbar — appears when files are checked in archive view ── #}
+            {# ── Bulk restore toolbar appears when files are checked in archive view ── #}
             <div x-show="selected.length > 0" x-cloak x-transition
                  class="bg-[#13151c] border border-zinc-600/80 rounded-xl px-5 py-3 mb-5 flex items-center gap-4 flex-wrap">
                 <span class="text-sm text-zinc-300" x-text="`${selected.length} file${selected.length > 1 ? 's' : ''} selected`"></span>
@@ -743,7 +743,7 @@ document.addEventListener('alpine:init', () => {
             </div>
             {% endif %}{# /not is_archive_view and not is_recycle_bin #}
 
-            {# Upload progress moved to toast stack — no inline bar needed #}
+            {# Upload progress moved to toast stack no inline bar needed #}
 
 
             {# ── Live search results target ── #}
@@ -760,7 +760,7 @@ document.addEventListener('alpine:init', () => {
          @click.stop
          class="w-52 bg-[#1a1d27] border border-zinc-700/60 rounded-xl shadow-2xl shadow-black/60 overflow-hidden py-1">
 
-        {# Open — folders only, single select #}
+        {# Open folders only, single select #}
         <a x-show="ctx.isFolder && selectedFolders.length === 1"
            :href="ctx.folderUrl"
            @click="closeCtx()"
@@ -769,7 +769,7 @@ document.addEventListener('alpine:init', () => {
             Open
         </a>
 
-        {# Download as Zip — folders only (single or multi) #}
+        {# Download as Zip folders only (single or multi) #}
         <button x-show="ctx.isFolder && selectedFolders.length >= 1"
                 @click="closeCtx(); downloadFolderZip(selectedFolders.length > 1 ? selectedFolders : [ctx.pk], selectedFolders.length > 1 ? `${selectedFolders.length} folders` : ctx.name)"
                 class="w-full flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-white/5 hover:text-zinc-100 transition-colors">
@@ -777,7 +777,7 @@ document.addEventListener('alpine:init', () => {
             Download as Zip
         </button>
 
-        {# Preview — only if not archived or is restored #}
+        {# Preview only if not archived or is restored #}
         <button x-show="!ctx.isFolder && selected.length === 1 && (!ctx.archived || ctx.restoreStatus === 'ready')"
                 @click="openPreview(ctx.pk); closeCtx()"
                 class="w-full flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-white/5 hover:text-zinc-100 transition-colors">
@@ -785,7 +785,7 @@ document.addEventListener('alpine:init', () => {
             Preview
         </button>
 
-        {# Download — right-clicked file, or right-clicked folder with files also selected #}
+        {# Download right-clicked file, or right-clicked folder with files also selected #}
         <button x-show="(!ctx.isFolder && (!ctx.archived || ctx.restoreStatus === 'ready')) || (ctx.isFolder && selected.length > 0)"
                 @click="
                     const ids = selected.length > 0 ? selected : [ctx.pk];
@@ -803,7 +803,7 @@ document.addEventListener('alpine:init', () => {
             <span x-text="selected.length > 0 ? `Download (${selected.length})` : 'Download'"></span>
         </button>
 
-        {# Archive to Deep Archive — files only, hidden when folders are in the selection #}
+        {# Archive to Deep Archive files only, hidden when folders are in the selection #}
         <button x-show="selectedFolders.length === 0 && (selected.length > 0 || (!ctx.isFolder && !ctx.archived))"
                 @click="
                     closeCtx();
@@ -834,7 +834,7 @@ document.addEventListener('alpine:init', () => {
             <span x-text="selected.length > 0 ? `Archive (${selected.length})` : 'Archive'"></span>
         </button>
 
-        {# Restore — archived files only #}
+        {# Restore archived files only #}
         <button x-show="!ctx.isFolder && ctx.archived && ctx.restoreStatus === ''"
                 @click="
                     closeCtx();
@@ -930,10 +930,10 @@ document.addEventListener('alpine:init', () => {
                                'text-red-100':   t.type === 'error',
                                'text-zinc-100':  t.type === 'progress',
                            }"
-                           x-text="t.type === 'progress' ? (t.done ? t.message + (t.jobId ? '.zip — ready!' : ' — done!') : (t.jobId ? 'Zipping ' + t.message + '.zip…' : 'Uploading ' + t.message + '…')) : t.message"></p>
+                           x-text="t.type === 'progress' ? (t.done ? t.message + (t.jobId ? '.zip ready!' : ' done!') : (t.jobId ? 'Zipping ' + t.message + '.zip…' : 'Uploading ' + t.message + '…')) : t.message"></p>
                         <p x-show="t.type === 'progress' && !t.done"
                            class="text-xs text-zinc-500 mt-0.5"
-                           x-text="t.progress > 0 ? `${t.progress}%${t.progress >= 95 ? ' — saving…' : ''}` : 'Starting…'"></p>
+                           x-text="t.progress > 0 ? `${t.progress}%${t.progress >= 95 ? ' saving…' : ''}` : 'Starting…'"></p>
                     </div>
 
                     {# Close #}
@@ -942,7 +942,7 @@ document.addEventListener('alpine:init', () => {
                     </button>
                 </div>
 
-                {# Progress bar — only for zip jobs #}
+                {# Progress bar only for zip jobs #}
                 <template x-if="t.type === 'progress' || t.done">
                     <div class="h-1 w-full bg-zinc-800">
                         <div class="h-full transition-all duration-500 rounded-full"
@@ -1035,7 +1035,7 @@ document.addEventListener('alpine:init', () => {
                 </div>
             </template>
 
-            {# Other file types — show download prompt #}
+            {# Other file types show download prompt #}
             <template x-if="isOther()">
                 <div class="flex flex-col items-center gap-5 p-8 text-center">
                     <div class="w-20 h-20 rounded-2xl bg-[#13151c] border border-zinc-700/60 flex items-center justify-center">
