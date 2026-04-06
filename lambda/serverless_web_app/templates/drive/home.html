@@ -140,17 +140,22 @@ document.addEventListener('alpine:init', () => {
         },
 
         /* ── rename modal ── */
-        renameModal: { show: false, pk: null, isFolder: false, value: '', error: '', loading: false },
+        renameModal: { show: false, pk: null, isFolder: false, value: '', ext: '', error: '', loading: false },
         openRename(pk, isFolder, currentName) {
-            this.renameModal = { show: true, pk, isFolder, value: currentName, error: '', loading: false };
+            let stem = currentName, ext = '';
+            if (!isFolder) {
+                const dot = currentName.lastIndexOf('.');
+                if (dot > 0) { stem = currentName.slice(0, dot); ext = currentName.slice(dot); }
+            }
+            this.renameModal = { show: true, pk, isFolder, value: stem, ext, error: '', loading: false };
             this.$nextTick(() => {
                 const inp = document.getElementById('rename-input');
                 if (inp) { inp.focus(); inp.select(); }
             });
         },
         async submitRename() {
-            const { pk, isFolder, value } = this.renameModal;
-            const name = value.trim();
+            const { pk, isFolder, value, ext } = this.renameModal;
+            const name = (value.trim() + (isFolder ? '' : ext));
             if (!name) { this.renameModal.error = 'Name cannot be empty.'; return; }
             this.renameModal.loading = true;
             this.renameModal.error = '';
@@ -1328,12 +1333,17 @@ document.addEventListener('alpine:init', () => {
                 <h3 class="text-base font-semibold text-zinc-100" x-text="renameModal.isFolder ? 'Rename Folder' : 'Rename File'"></h3>
             </div>
 
-            <input id="rename-input"
-                   x-model="renameModal.value"
-                   @keydown.enter="submitRename()"
-                   @keydown.escape="renameModal.show = false"
-                   type="text"
-                   class="w-full bg-zinc-800/60 border border-zinc-600 focus:border-sky-500 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 transition-colors outline-none mb-1">
+            <div class="flex items-center bg-zinc-800/60 border border-zinc-600 focus-within:border-sky-500 rounded-xl overflow-hidden transition-colors mb-1">
+                <input id="rename-input"
+                       x-model="renameModal.value"
+                       @keydown.enter="submitRename()"
+                       @keydown.escape="renameModal.show = false"
+                       type="text"
+                       class="flex-1 min-w-0 bg-transparent px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 outline-none">
+                <span x-show="renameModal.ext"
+                      x-text="renameModal.ext"
+                      class="pr-4 text-sm text-zinc-500 shrink-0 select-none"></span>
+            </div>
             <p x-show="renameModal.error" x-text="renameModal.error" class="text-xs text-red-400 mb-3 mt-1"></p>
             <div :class="renameModal.error ? '' : 'mt-4'" class="flex items-center gap-3 justify-end">
                 <button @click="renameModal.show = false"
