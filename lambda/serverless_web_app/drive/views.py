@@ -286,10 +286,11 @@ def upload_url(request):
         folder_pk    = data.get("folder_pk")
 
         folder_path = _get_folder_path(folder_pk, owner_sub)
+        unique_name = f"{uuid.uuid4()}-{filename}"
         if folder_path:
-            s3_key = f"{owner_sub}/{folder_path}/{uuid.uuid4()}/{filename}"
+            s3_key = f"{owner_sub}/{folder_path}/{unique_name}"
         else:
-            s3_key = f"{owner_sub}/{uuid.uuid4()}/{filename}"
+            s3_key = f"{owner_sub}/{unique_name}"
 
         presigned = _s3().generate_presigned_post(
             Bucket=settings.DRIVE_BUCKET_NAME,
