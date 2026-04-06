@@ -155,9 +155,8 @@ def drive_home(request, folder_pk=None):
         folder=current_folder,
         deleted_at__isnull=True,
     ).filter(
-        # Show instantly-accessible tiers (GLACIER_IR is default; STANDARD/STANDARD_IA kept for legacy files)
-        # or Deep Archive / Glacier files that have been restored (ready)
-        Q(storage_class__in=(DriveFile.GLACIER_IR, DriveFile.STANDARD, DriveFile.STANDARD_IA))
+        # Show instantly-accessible files, or Deep Archive / Glacier files that have been restored
+        Q(storage_class=DriveFile.GLACIER_IR)
         | Q(storage_class__in=(DriveFile.GLACIER, DriveFile.DEEP_ARCHIVE), restore_status=DriveFile.RESTORE_READY)
     )
     subfolders = DriveFolder.objects.filter(owner_sub=owner_sub, parent=current_folder, deleted_at__isnull=True)
@@ -870,7 +869,7 @@ def _collect_folder_files(folder_pk, owner_sub):
     Only non-archived, non-deleted files are included (archived files can't be read from S3).
     arc_path is the relative path inside the zip (e.g. "subfolder/file.jpg").
     """
-    accessible = (DriveFile.STANDARD, DriveFile.STANDARD_IA, DriveFile.GLACIER_IR)
+    accessible = (DriveFile.GLACIER_IR,)
     result = []
     queue = [(folder_pk, "")]  # (folder_pk, path_prefix)
     visited = set()
@@ -897,7 +896,7 @@ def _collect_folder_files(folder_pk, owner_sub):
 
 def _folder_total_size(folder_pk, owner_sub):
     """Sum of accessible file sizes in the entire folder tree."""
-    accessible = (DriveFile.STANDARD, DriveFile.STANDARD_IA, DriveFile.GLACIER_IR)
+    accessible = (DriveFile.GLACIER_IR,)
     queue = [folder_pk]
     visited = set()
     folder_pks = []

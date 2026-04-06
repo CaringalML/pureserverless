@@ -33,15 +33,11 @@ class DriveFolder(models.Model):
 
 
 class DriveFile(models.Model):
-    STANDARD      = "STANDARD"
-    STANDARD_IA   = "STANDARD_IA"
     GLACIER_IR    = "GLACIER_IR"
     GLACIER       = "GLACIER"
     DEEP_ARCHIVE  = "DEEP_ARCHIVE"
 
     STORAGE_CLASS_CHOICES = [
-        (STANDARD,     "Standard"),
-        (STANDARD_IA,  "Standard-IA"),
         (GLACIER_IR,   "Glacier Instant Retrieval"),
         (GLACIER,      "Glacier Flexible Retrieval"),
         (DEEP_ARCHIVE, "Deep Archive"),
