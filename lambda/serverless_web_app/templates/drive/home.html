@@ -74,7 +74,14 @@ document.addEventListener('alpine:init', () => {
                     method: 'POST',
                     headers: { 'X-CSRFToken': csrf() },
                 });
-                const data = await r.json();
+                let data;
+                try {
+                    data = await r.json();
+                } catch {
+                    const text = await r.text().catch(() => `HTTP ${r.status}`);
+                    this.showToast(`Zip error (${r.status}): ${text.slice(0, 120)}`, 'error', 0);
+                    return;
+                }
                 if (data.status === 'ready') {
                     this.showToast(`Downloading "${folderName}.zip"…`, 'success');
                     const iframe = document.createElement('iframe');
@@ -83,13 +90,13 @@ document.addEventListener('alpine:init', () => {
                     document.body.appendChild(iframe);
                     setTimeout(() => iframe.remove(), 10000);
                 } else if (data.status === 'pending') {
-                    this.showToast(`Large folder — zipping in background. We'll download when ready.`, 'info', 0);
+                    this.showToast(`Large folder — zipping in background. We'll notify when ready.`, 'info', 0);
                     this.startZipPoll(data.job_id, folderName);
                 } else {
-                    this.showToast(data.error || 'Zip failed.', 'error');
+                    this.showToast(data.error || 'Zip failed.', 'error', 0);
                 }
             } catch (e) {
-                this.showToast('Could not start zip download.', 'error');
+                this.showToast(`Network error: ${e.message}`, 'error', 0);
             }
         },
 
