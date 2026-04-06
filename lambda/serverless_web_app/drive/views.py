@@ -420,9 +420,15 @@ def bulk_bin_restore(request):
     file_ids = data.get("file_ids", [])
     folder_ids = data.get("folder_ids", [])
     owner_sub = _get_owner_sub(request)
+    files = list(DriveFile.objects.filter(pk__in=file_ids, owner_sub=owner_sub, deleted_at__isnull=False))
+    archived_ids = [f.pk for f in files if f.storage_class in (DriveFile.GLACIER, DriveFile.DEEP_ARCHIVE)]
     DriveFile.objects.filter(pk__in=file_ids, owner_sub=owner_sub, deleted_at__isnull=False).update(deleted_at=None)
     DriveFolder.objects.filter(pk__in=folder_ids, owner_sub=owner_sub, deleted_at__isnull=False).update(deleted_at=None)
-    return JsonResponse({"restored_files": list(file_ids), "restored_folders": list(folder_ids)})
+    return JsonResponse({
+        "restored_files": list(file_ids),
+        "archived_file_ids": archived_ids,
+        "restored_folders": list(folder_ids),
+    })
 
 
 @cognito_login_required

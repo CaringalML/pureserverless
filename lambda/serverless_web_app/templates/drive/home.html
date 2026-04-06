@@ -450,9 +450,18 @@ document.addEventListener('alpine:init', () => {
                 const folderEls = (data.restored_folders ?? []).map(id => document.getElementById('bin-folder-' + id)).filter(Boolean);
                 folderEls.forEach(el => el.remove());
                 (data.restored_files ?? []).forEach(id => document.getElementById('bin-file-' + id)?.remove());
-                const msg = this._binToastMsg('Restored', ' to My Drive', folderEls, data.restored_files?.length ?? 0);
+                const archivedSet = new Set(data.archived_file_ids ?? []);
+                const driveFileCount    = (data.restored_files ?? []).filter(id => !archivedSet.has(id)).length;
+                const archiveFileCount  = archivedSet.size;
+                const parts = [];
+                if (folderEls.length || driveFileCount) {
+                    parts.push(this._binToastMsg('Restored', ' to My Drive', folderEls, driveFileCount));
+                }
+                if (archiveFileCount) {
+                    parts.push(`Restored ${archiveFileCount} file${archiveFileCount !== 1 ? 's' : ''} to Archive`);
+                }
                 this.selected = []; this.selectedFolders = [];
-                this.showToast(msg, 'success');
+                this.showToast(parts.join(' · '), 'success');
             } catch (err) {
                 this.showToast('Restore failed: ' + err.message, 'error');
             } finally {
