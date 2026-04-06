@@ -82,30 +82,31 @@ def _collect_files(folder_pk, owner_sub):
     return result
 
 
-def run_zip_folder(folder_id, owner_sub, job_db_id):
+def run_zip_folder(folder_ids, owner_sub, job_db_id):
     from drive.models import DriveFolder, BatchJob
 
-    folder = DriveFolder.objects.filter(pk=folder_id, owner_sub=owner_sub).first()
-    if not folder:
-        raise RuntimeError(f"Folder {folder_id} not found for owner {owner_sub}")
-
-    files = _collect_files(folder_id, owner_sub)
-    log.info("Zipping %d files from folder %s (%s)", len(files), folder_id, folder.name)
+    folders = list(DriveFolder.objects.filter(pk__in=folder_ids, owner_sub=owner_sub))
+    if not folders:
+        raise RuntimeError(f"No folders found for ids={folder_ids} owner={owner_sub}")
 
     bucket = os.environ["DRIVE_BUCKET_NAME"]
     region = os.environ.get("AWS_REGION", "ap-southeast-2")
     s3 = boto3.client("s3", region_name=region)
 
-    # Stream into a BytesIO zip — Fargate has enough memory for large zips
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for drv_file, arc_path in files:
-            try:
-                obj = s3.get_object(Bucket=bucket, Key=drv_file.s3_key)
-                zf.writestr(arc_path, obj["Body"].read())
-                log.info("  added %s", arc_path)
-            except Exception as e:
-                log.warning("  skip %s: %s", drv_file.s3_key, e)
+        for folder in folders:
+            # Each folder becomes a top-level directory in the zip
+            files = _collect_files(folder.pk, owner_sub)
+            log.info("Zipping %d files from folder %s (%s)", len(files), folder.pk, folder.name)
+            for drv_file, rel_path in files:
+                arc_path = f"{folder.name}/{rel_path}"
+                try:
+                    obj = s3.get_object(Bucket=bucket, Key=drv_file.s3_key)
+                    zf.writestr(arc_path, obj["Body"].read())
+                    log.info("  added %s", arc_path)
+                except Exception as e:
+                    log.warning("  skip %s: %s", drv_file.s3_key, e)
 
     buf.seek(0)
     zip_key = f"temp-zips/{uuid.uuid4()}.zip"
@@ -123,10 +124,11 @@ def run_zip_folder(folder_id, owner_sub, job_db_id):
 
 
 def main():
-    job_type   = os.environ.get("JOB_TYPE", "zip_folder")
-    folder_id  = int(os.environ["FOLDER_ID"])
-    owner_sub  = os.environ["OWNER_SUB"]
-    job_db_id  = int(os.environ["JOB_DB_ID"])
+    job_type      = os.environ.get("JOB_TYPE", "zip_folder")
+    folder_ids_str = os.environ.get("FOLDER_IDS", "")
+    owner_sub     = os.environ["OWNER_SUB"]
+    job_db_id     = int(os.environ["JOB_DB_ID"])
+    folder_ids    = [int(x) for x in folder_ids_str.split(",") if x.strip()]
 
     _setup_django()
 
@@ -135,7 +137,7 @@ def main():
 
     try:
         if job_type == "zip_folder":
-            run_zip_folder(folder_id, owner_sub, job_db_id)
+            run_zip_folder(folder_ids, owner_sub, job_db_id)
         else:
             raise RuntimeError(f"Unknown JOB_TYPE: {job_type}")
     except Exception as e:

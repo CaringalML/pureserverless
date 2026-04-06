@@ -809,53 +809,51 @@ def _zip_and_upload(folder_pk, owner_sub, s3_client, bucket):
 
 @cognito_login_required
 @require_POST
-def zip_folder(request, pk):
+def zip_folder(request, pk=None):
     """
-    Zip a folder for download.
-    - Small folders (≤50 MB): zip inline in Lambda, return immediate presigned URL.
-    - Large folders: submit an AWS Batch job, return job ID for polling.
+    Zip one or more folders for download via AWS Batch.
+    Accepts optional JSON body: { "folder_ids": [1, 2, 3] }
+    Falls back to URL pk for single-folder requests.
+    All folders are zipped into a single archive under their own top-level names.
     """
     owner_sub = _get_owner_sub(request)
-    folder = get_object_or_404(DriveFolder, pk=pk, owner_sub=owner_sub)
-    s3 = _s3()
     bucket = settings.DRIVE_BUCKET_NAME
 
-    total_size = _folder_total_size(pk, owner_sub)
+    # Resolve folder PKs — from JSON body or URL parameter
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        body = {}
 
-    if total_size <= INLINE_ZIP_THRESHOLD:
-        try:
-            zip_key = _zip_and_upload(pk, owner_sub, s3, bucket)
-            url = s3.generate_presigned_url(
-                "get_object",
-                Params={
-                    "Bucket": bucket,
-                    "Key": zip_key,
-                    "ResponseContentDisposition": f'attachment; filename="{folder.name}.zip"',
-                },
-                ExpiresIn=3600,
-            )
-            return JsonResponse({"status": "ready", "url": url})
-        except Exception as e:
-            logger.error("inline zip failed folder=%s err=%s", pk, e)
-            return JsonResponse({"error": str(e)}, status=500)
+    folder_ids = body.get("folder_ids") or ([pk] if pk else [])
+    if not folder_ids:
+        return JsonResponse({"error": "No folders specified"}, status=400)
 
-    # Large folder — delegate to AWS Batch
+    # Validate all folders belong to this owner
+    folders = list(DriveFolder.objects.filter(pk__in=folder_ids, owner_sub=owner_sub))
+    if len(folders) != len(folder_ids):
+        return JsonResponse({"error": "One or more folders not found"}, status=404)
+
+    zip_name = folders[0].name if len(folders) == 1 else "folders"
+    folder_ids_str = ",".join(str(f.pk) for f in folders)
+    folder_names_str = ", ".join(f.name for f in folders)
+
     batch_job = BatchJob.objects.create(
         type="zip_folder",
         owner_sub=owner_sub,
-        folder_name=folder.name,
+        folder_name=zip_name,
         status=BatchJob.PENDING,
     )
     try:
         batch = boto3.client("batch", region_name=settings.AWS_REGION)
         response = batch.submit_job(
-            jobName=f"zip-folder-{pk}-{batch_job.pk}",
+            jobName=f"zip-folders-{batch_job.pk}",
             jobQueue=settings.BATCH_JOB_QUEUE,
             jobDefinition=settings.BATCH_JOB_DEFINITION,
             containerOverrides={
                 "environment": [
                     {"name": "JOB_TYPE",              "value": "zip_folder"},
-                    {"name": "FOLDER_ID",             "value": str(pk)},
+                    {"name": "FOLDER_IDS",            "value": folder_ids_str},
                     {"name": "OWNER_SUB",             "value": owner_sub},
                     {"name": "JOB_DB_ID",             "value": str(batch_job.pk)},
                     {"name": "DRIVE_BUCKET_NAME",     "value": bucket},

@@ -67,12 +67,15 @@ document.addEventListener('alpine:init', () => {
                 clearInterval(this._zipPollTimer);
             }, 600000);
         },
-        async downloadFolderZip(pk, folderName) {
+        async downloadFolderZip(pks, folderName) {
+            // pks can be a single number or array of numbers
+            const ids = Array.isArray(pks) ? pks : [pks];
             this.showToast(`Preparing "${folderName}.zip"…`, 'info', 0);
             try {
-                const r = await fetch(`/drive/folder/${pk}/zip/`, {
+                const r = await fetch(`/drive/folders/zip/`, {
                     method: 'POST',
-                    headers: { 'X-CSRFToken': this.csrf() },
+                    headers: { 'X-CSRFToken': this.csrf(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder_ids: ids }),
                 });
                 let data;
                 try {
@@ -768,9 +771,9 @@ document.addEventListener('alpine:init', () => {
             Open
         </a>
 
-        {# Download as Zip — folders only, single select #}
-        <button x-show="ctx.isFolder && selectedFolders.length === 1"
-                @click="closeCtx(); downloadFolderZip(ctx.pk, ctx.name)"
+        {# Download as Zip — folders only (single or multi) #}
+        <button x-show="ctx.isFolder && selectedFolders.length >= 1"
+                @click="closeCtx(); downloadFolderZip(selectedFolders.length > 1 ? selectedFolders : [ctx.pk], selectedFolders.length > 1 ? `${selectedFolders.length} folders` : ctx.name)"
                 class="w-full flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-white/5 hover:text-zinc-100 transition-colors">
             <svg class="w-4 h-4 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 12v-8m0 8l-3-3m3 3l3-3"/></svg>
             Download as Zip
