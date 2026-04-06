@@ -25,6 +25,7 @@ document.addEventListener('alpine:init', () => {
         binDeleting: false,
         storageUsed: '{{ storage_used|default:"" }}',
         sidebarOpen: window.innerWidth >= 768,
+        _confirmQueue: Promise.resolve(),
         view: localStorage.getItem('nd_view') || 'list',
         preview: null,
         ctx: { show: false, x: 0, y: 0, pk: null, archived: false, restoreStatus: '', name: '', isFolder: false, folderUrl: '' },
@@ -281,8 +282,24 @@ document.addEventListener('alpine:init', () => {
                     body: JSON.stringify({ filename: file.name, content_type: file.type || 'application/octet-stream', folder_pk: folderPk }),
                 });
                 if (!resp.ok) throw new Error(`Upload URL failed (HTTP ${resp.status})`);
-                const { url, fields, s3_key, error } = await resp.json();
+                const { url, fields, s3_key, error, exists } = await resp.json();
                 if (error) throw new Error(error);
+
+                if (exists) {
+                    // Serialize overwrite confirmations — one modal at a time even during concurrent uploads
+                    const ok = await (this._confirmQueue = this._confirmQueue.then(() =>
+                        this.showConfirm(
+                            'File Already Exists',
+                            `"${file.name}" already exists in this location. Replace it?`,
+                            'Replace',
+                            true
+                        )
+                    ));
+                    if (!ok) {
+                        this.dismissToast(toastId);
+                        return false;
+                    }
+                }
 
                 await new Promise((resolve, reject) => {
                     const form = new FormData();
@@ -309,8 +326,13 @@ document.addEventListener('alpine:init', () => {
                 });
                 const result = await confirmResp.json();
                 if (result.html) {
-                    const list = document.getElementById('file-list');
-                    if (list) { list.insertAdjacentHTML('afterbegin', result.html); document.getElementById('empty-state')?.remove(); }
+                    if (result.overwritten) {
+                        const existing = document.getElementById('file-' + result.id);
+                        if (existing) existing.outerHTML = result.html;
+                    } else {
+                        const list = document.getElementById('file-list');
+                        if (list) { list.insertAdjacentHTML('afterbegin', result.html); document.getElementById('empty-state')?.remove(); }
+                    }
                 }
                 if (result.storage_used) this.storageUsed = result.storage_used;
                 this._completeUploadToast(toastId);

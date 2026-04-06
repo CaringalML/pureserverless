@@ -291,6 +291,10 @@ def upload_url(request):
         else:
             s3_key = f"{owner_sub}/{filename}"
 
+        exists = DriveFile.objects.filter(
+            s3_key=s3_key, owner_sub=owner_sub, deleted_at__isnull=True
+        ).exists()
+
         presigned = _s3().generate_presigned_post(
             Bucket=settings.DRIVE_BUCKET_NAME,
             Key=s3_key,
@@ -301,7 +305,7 @@ def upload_url(request):
             ],
             ExpiresIn=300,
         )
-        return JsonResponse({"url": presigned["url"], "fields": presigned["fields"], "s3_key": s3_key})
+        return JsonResponse({"url": presigned["url"], "fields": presigned["fields"], "s3_key": s3_key, "exists": exists})
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
@@ -325,14 +329,19 @@ def confirm_upload(request):
             Key=data["s3_key"],
         )
 
-        drive_file = DriveFile.objects.create(
-            owner_sub=owner_sub,
-            name=data["filename"],
+        drive_file, created = DriveFile.objects.update_or_create(
             s3_key=data["s3_key"],
-            size=head["ContentLength"],
-            content_type=head.get("ContentType", "application/octet-stream"),
-            folder=folder,
-            storage_class=DriveFile.GLACIER_IR,
+            defaults={
+                "owner_sub": owner_sub,
+                "name": data["filename"],
+                "size": head["ContentLength"],
+                "content_type": head.get("ContentType", "application/octet-stream"),
+                "folder": folder,
+                "storage_class": DriveFile.GLACIER_IR,
+                "deleted_at": None,
+                "restore_status": "",
+                "restore_expires_at": None,
+            },
         )
 
         _s3().copy_object(
@@ -345,7 +354,7 @@ def confirm_upload(request):
 
         html = render(request, "drive/partials/file_row.html", {"file": drive_file}).content.decode()
         _, storage_used, _ = _storage_stats(owner_sub)
-        return JsonResponse({"html": html, "id": drive_file.id, "storage_used": storage_used})
+        return JsonResponse({"html": html, "id": drive_file.id, "storage_used": storage_used, "overwritten": not created})
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
 
