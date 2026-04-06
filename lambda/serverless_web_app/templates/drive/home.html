@@ -37,40 +37,47 @@ document.addEventListener('alpine:init', () => {
             }
         },
 
-        /* ── zip polling ── */
-        _zipPollTimer: null,
+        /* ── zip polling — one timer per job ── */
+        _zipPollers: {},
         startZipPoll(jobId, folderName) {
-            clearInterval(this._zipPollTimer);
-            this._zipPollTimer = setInterval(async () => {
+            if (this._zipPollers[jobId]) return; // already polling
+            const timer = setInterval(async () => {
                 try {
                     const r = await fetch(`/drive/job/${jobId}/status/`);
                     const data = await r.json();
                     if (data.status === 'ready') {
-                        clearInterval(this._zipPollTimer);
-                        this.showToast(`"${folderName}.zip" is ready — downloading...`, 'success');
+                        clearInterval(timer);
+                        delete this._zipPollers[jobId];
+                        this.showToast(`"${folderName}.zip" ready — downloading…`, 'success');
                         const iframe = document.createElement('iframe');
                         iframe.style.display = 'none';
                         iframe.src = data.url;
                         document.body.appendChild(iframe);
                         setTimeout(() => iframe.remove(), 10000);
                     } else if (data.status === 'failed') {
-                        clearInterval(this._zipPollTimer);
-                        this.showToast(`Zip failed for "${folderName}". Please try again.`, 'error');
+                        clearInterval(timer);
+                        delete this._zipPollers[jobId];
+                        this.showToast(`Zip failed for "${folderName}". Please try again.`, 'error', 0);
                     }
                 } catch (e) {
-                    clearInterval(this._zipPollTimer);
+                    clearInterval(timer);
+                    delete this._zipPollers[jobId];
                     this.showToast('Could not check zip status.', 'error');
                 }
             }, 3000);
-            // Stop polling after 10 minutes regardless
+            this._zipPollers[jobId] = timer;
+            // Safety: stop after 10 minutes
             setTimeout(() => {
-                clearInterval(this._zipPollTimer);
+                if (this._zipPollers[jobId]) {
+                    clearInterval(this._zipPollers[jobId]);
+                    delete this._zipPollers[jobId];
+                }
             }, 600000);
         },
-        async downloadFolderZip(pks, folderName) {
-            // pks can be a single number or array of numbers
+        async downloadFolderZip(pks, label) {
             const ids = Array.isArray(pks) ? pks : [pks];
-            this.showToast(`Preparing "${folderName}.zip"…`, 'info', 0);
+            const plural = ids.length > 1;
+            this.showToast(`Queuing ${plural ? ids.length + ' folders' : '"' + label + '"'} for zipping…`, 'info', 0);
             try {
                 const r = await fetch(`/drive/folders/zip/`, {
                     method: 'POST',
@@ -78,25 +85,24 @@ document.addEventListener('alpine:init', () => {
                     body: JSON.stringify({ folder_ids: ids }),
                 });
                 let data;
-                try {
-                    data = await r.json();
-                } catch {
+                try { data = await r.json(); }
+                catch {
                     const text = await r.text().catch(() => `HTTP ${r.status}`);
                     this.showToast(`Zip error (${r.status}): ${text.slice(0, 120)}`, 'error', 0);
                     return;
                 }
-                if (data.status === 'ready') {
-                    this.showToast(`Downloading "${folderName}.zip"…`, 'success');
-                    const iframe = document.createElement('iframe');
-                    iframe.style.display = 'none';
-                    iframe.src = data.url;
-                    document.body.appendChild(iframe);
-                    setTimeout(() => iframe.remove(), 10000);
-                } else if (data.status === 'pending') {
-                    this.showToast(`Large folder — zipping in background. We'll notify when ready.`, 'info', 0);
-                    this.startZipPoll(data.job_id, folderName);
-                } else {
+                if (!data.jobs || data.jobs.length === 0) {
                     this.showToast(data.error || 'Zip failed.', 'error', 0);
+                    return;
+                }
+                // Each folder has its own job — poll independently
+                for (const job of data.jobs) {
+                    if (job.error) {
+                        this.showToast(`Failed to queue "${job.folder_name}": ${job.error}`, 'error', 0);
+                    } else {
+                        this.showToast(`"${job.folder_name}" zipping in background…`, 'info', 4000);
+                        this.startZipPoll(job.job_id, job.folder_name);
+                    }
                 }
             } catch (e) {
                 this.showToast(`Network error: ${e.message}`, 'error', 0);

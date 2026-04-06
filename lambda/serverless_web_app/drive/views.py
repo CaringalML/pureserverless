@@ -811,15 +811,14 @@ def _zip_and_upload(folder_pk, owner_sub, s3_client, bucket):
 @require_POST
 def zip_folder(request, pk=None):
     """
-    Zip one or more folders for download via AWS Batch.
-    Accepts optional JSON body: { "folder_ids": [1, 2, 3] }
-    Falls back to URL pk for single-folder requests.
-    All folders are zipped into a single archive under their own top-level names.
+    Zip one or more folders for download.
+    Each folder gets its own independent Batch job so they run in parallel.
+    Accepts JSON body: { "folder_ids": [1, 2, 3] } or falls back to URL pk.
+    Returns: { "jobs": [{ "job_id": N, "folder_name": "..." }, ...] }
     """
     owner_sub = _get_owner_sub(request)
     bucket = settings.DRIVE_BUCKET_NAME
 
-    # Resolve folder PKs — from JSON body or URL parameter
     try:
         body = json.loads(request.body) if request.body else {}
     except json.JSONDecodeError:
@@ -829,47 +828,47 @@ def zip_folder(request, pk=None):
     if not folder_ids:
         return JsonResponse({"error": "No folders specified"}, status=400)
 
-    # Validate all folders belong to this owner
     folders = list(DriveFolder.objects.filter(pk__in=folder_ids, owner_sub=owner_sub))
     if len(folders) != len(folder_ids):
         return JsonResponse({"error": "One or more folders not found"}, status=404)
 
-    zip_name = folders[0].name if len(folders) == 1 else "folders"
-    folder_ids_str = ",".join(str(f.pk) for f in folders)
-    folder_names_str = ", ".join(f.name for f in folders)
+    batch = boto3.client("batch", region_name=settings.AWS_REGION)
+    submitted = []
 
-    batch_job = BatchJob.objects.create(
-        type="zip_folder",
-        owner_sub=owner_sub,
-        folder_name=zip_name,
-        status=BatchJob.PENDING,
-    )
-    try:
-        batch = boto3.client("batch", region_name=settings.AWS_REGION)
-        response = batch.submit_job(
-            jobName=f"zip-folders-{batch_job.pk}",
-            jobQueue=settings.BATCH_JOB_QUEUE,
-            jobDefinition=settings.BATCH_JOB_DEFINITION,
-            containerOverrides={
-                "environment": [
-                    {"name": "JOB_TYPE",              "value": "zip_folder"},
-                    {"name": "FOLDER_IDS",            "value": folder_ids_str},
-                    {"name": "OWNER_SUB",             "value": owner_sub},
-                    {"name": "JOB_DB_ID",             "value": str(batch_job.pk)},
-                    {"name": "DRIVE_BUCKET_NAME",     "value": bucket},
-                    {"name": "AWS_REGION",            "value": settings.AWS_REGION},
-                    {"name": "SSM_DATABASE_URL_NAME", "value": os.environ.get("SSM_DATABASE_URL_NAME", "")},
-                ]
-            },
+    for folder in folders:
+        batch_job = BatchJob.objects.create(
+            type="zip_folder",
+            owner_sub=owner_sub,
+            folder_name=folder.name,
+            status=BatchJob.PENDING,
         )
-        batch_job.job_id = response["jobId"]
-        batch_job.save(update_fields=["job_id"])
-        return JsonResponse({"status": "pending", "job_id": batch_job.pk})
-    except Exception as e:
-        logger.error("batch submit failed: %s", e)
-        batch_job.status = BatchJob.FAILED
-        batch_job.save(update_fields=["status"])
-        return JsonResponse({"error": str(e)}, status=500)
+        try:
+            response = batch.submit_job(
+                jobName=f"zip-folder-{folder.pk}-{batch_job.pk}",
+                jobQueue=settings.BATCH_JOB_QUEUE,
+                jobDefinition=settings.BATCH_JOB_DEFINITION,
+                containerOverrides={
+                    "environment": [
+                        {"name": "JOB_TYPE",              "value": "zip_folder"},
+                        {"name": "FOLDER_IDS",            "value": str(folder.pk)},
+                        {"name": "OWNER_SUB",             "value": owner_sub},
+                        {"name": "JOB_DB_ID",             "value": str(batch_job.pk)},
+                        {"name": "DRIVE_BUCKET_NAME",     "value": bucket},
+                        {"name": "AWS_REGION",            "value": settings.AWS_REGION},
+                        {"name": "SSM_DATABASE_URL_NAME", "value": os.environ.get("SSM_DATABASE_URL_NAME", "")},
+                    ]
+                },
+            )
+            batch_job.job_id = response["jobId"]
+            batch_job.save(update_fields=["job_id"])
+            submitted.append({"job_id": batch_job.pk, "folder_name": folder.name})
+        except Exception as e:
+            logger.error("batch submit failed folder=%s: %s", folder.pk, e)
+            batch_job.status = BatchJob.FAILED
+            batch_job.save(update_fields=["status"])
+            submitted.append({"job_id": batch_job.pk, "folder_name": folder.name, "error": str(e)})
+
+    return JsonResponse({"status": "pending", "jobs": submitted})
 
 
 @cognito_login_required
