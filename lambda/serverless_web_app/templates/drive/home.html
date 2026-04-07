@@ -1214,6 +1214,8 @@ document.addEventListener('alpine:init', () => {
     <template x-if="preview">
     <div x-show="preview"
          @keydown.escape.window="closePreview()"
+         @keydown.arrow-left.window="if(isVideo()){ const v=$el.querySelector('video'); if(v) v.currentTime=Math.max(0,v.currentTime-10); }"
+         @keydown.arrow-right.window="if(isVideo()){ const v=$el.querySelector('video'); if(v) v.currentTime=Math.min(v.duration||0,v.currentTime+10); }"
          class="fixed inset-0 z-50 flex flex-col bg-black/95">
 
         {# Top bar #}
