@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}NovaDrive{% endblock %}
+{% block title %}{% if is_archive_view %}Archive{% elif is_recycle_bin %}Recycle Bin{% elif current_folder %}{{ current_folder.name }}{% else %}My Drive{% endif %} — NovaDrive{% endblock %}
 
 {# Hide the entire navbar on the drive page branding lives in the sidebar #}
 {% block navbar %}{% endblock %}
