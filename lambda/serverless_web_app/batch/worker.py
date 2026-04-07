@@ -57,7 +57,7 @@ def _collect_files(folder_pk, owner_sub):
     """Return list of (DriveFile, arc_path) for all accessible files in the tree."""
     from drive.models import DriveFile, DriveFolder
 
-    accessible = (DriveFile.STANDARD, DriveFile.STANDARD_IA, DriveFile.GLACIER_IR)
+    accessible = (DriveFile.GLACIER_IR,)
     result = []
     queue = [(folder_pk, "")]
     visited = set()
