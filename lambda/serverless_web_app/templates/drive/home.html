@@ -1220,7 +1220,7 @@ document.addEventListener('alpine:init', () => {
              if (!v) return;
              if ($event.key === 'ArrowLeft')  { $event.preventDefault(); v.currentTime = Math.max(0, v.currentTime - 10); }
              if ($event.key === 'ArrowRight') { $event.preventDefault(); v.currentTime = Math.min(v.duration || 0, v.currentTime + 10); }
-             if ($event.key === ' ')          { $event.preventDefault(); v.paused ? v.play() : v.pause(); }
+             if ($event.key === ' ' && document.activeElement !== v) { $event.preventDefault(); v.paused ? v.play() : v.pause(); }
          "
          class="fixed inset-0 z-50 flex flex-col bg-black/95">
 
