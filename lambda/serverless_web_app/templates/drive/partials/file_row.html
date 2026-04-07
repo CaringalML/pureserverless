@@ -48,7 +48,8 @@
                        preload="metadata"
                        muted
                        playsinline
-                       onloadedmetadata="this.currentTime=0;this.classList.remove('opacity-0');document.getElementById('spin-vlist-{{ file.pk }}').style.display='none'"></video>
+                       onloadedmetadata="this.currentTime=0;this.classList.remove('opacity-0');document.getElementById('spin-vlist-{{ file.pk }}').style.display='none'"
+                       onerror="this.style.display='none';document.getElementById('spin-vlist-{{ file.pk }}').style.display='none'"></video>
                 <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-white drop-shadow" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
                 </div>
@@ -112,7 +113,8 @@
                    preload="metadata"
                    muted
                    playsinline
-                   onloadedmetadata="this.currentTime=0;this.classList.remove('opacity-0');document.getElementById('spin-grid-{{ file.pk }}').style.display='none'"></video>
+                   onloadedmetadata="this.currentTime=0;this.classList.remove('opacity-0');document.getElementById('spin-grid-{{ file.pk }}').style.display='none'"
+                   onerror="this.style.display='none';document.getElementById('spin-grid-{{ file.pk }}').style.display='none'"></video>
             <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <div class="w-9 h-9 rounded-full bg-black/50 flex items-center justify-center">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
