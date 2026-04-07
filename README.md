@@ -1,9 +1,10 @@
 # NovaDrive
 
-A Google Drive-like file storage web app running on AWS Lambda — fully serverless, no EC2, no servers to manage. Push to `novadrive` and it deploys itself.
+A Google Drive-like cloud storage app running entirely on AWS Lambda — fully serverless, no EC2, no servers to manage. Push to `novadrive` and it deploys itself.
 
 **Live stack:** Django 5 → Mangum → AWS Lambda → API Gateway v2 → CloudFront → S3  
 **Auth:** AWS Cognito (signup, email verify, signin, forgot/reset password)  
+**UI:** Alpine.js + HTMX + Tailwind CSS (CDN — no build step)  
 **Domain:** `drive.nodepulsecaringal.xyz` (custom domain via ACM + Cloudflare + API Gateway)  
 **Region:** Sydney (`ap-southeast-2`)
 
@@ -16,14 +17,18 @@ Browser (drive.nodepulsecaringal.xyz)
   └── Cloudflare (proxied — DDoS protection, hides AWS URL)
         └── API Gateway v2 (HTTP API, custom domain, $default catch-all)
               └── Lambda (Python 3.12 — Django 5 + Mangum)
-                    ├── Cognito (signup, verify, signin, forgot/reset password)
-                    ├── Neon PostgreSQL (file metadata — credentials via SSM)
-                    ├── S3 (file storage — private, versioned)
+                    ├── Cognito            (auth — signup, verify, signin, forgot/reset)
+                    ├── Neon PostgreSQL    (file + folder metadata, batch job tracking)
+                    ├── S3                 (file storage — private, per-user folder prefix)
                     │     └── Direct browser upload via presigned POST URL
                     │         (file bytes never pass through Lambda)
-                    ├── CloudFront (signed URLs — only way to read files from S3)
-                    ├── Tailwind CSS / HTMX / Alpine.js (CDN — no build step)
-                    └── CloudWatch Logs + SNS alerts (4xx + spike alarms)
+                    ├── CloudFront         (signed URLs — only way to read files)
+                    ├── SSM Parameter Store (DB URL, Resend key, CloudFront RSA key)
+                    ├── AWS Batch / Fargate (folder zip jobs — bypasses Lambda timeout)
+                    └── Resend             (transactional email — archive / restore notifications)
+
+S3 Event → Lambda (notify.py)
+  └── ObjectRestore:Completed → update DB restore_status → send "ready" email via Resend
 
 Terraform Remote State
   ├── S3 Bucket (maangasserverless) — Intelligent-Tiering
@@ -33,23 +38,33 @@ Terraform Remote State
 ### Upload flow
 
 ```
-1. Browser → Lambda: "give me a presigned POST URL"
-2. Lambda → Browser: { url, fields, s3_key }   (signed by IAM, 5-min TTL)
-3. Browser → S3: POST directly with file + fields  (XHR for progress events)
-4. Browser → Lambda: "confirm upload for s3_key"
-5. Lambda → S3: head_object (verify it landed)
-6. Lambda → DB: save DriveFile metadata row
-7. Browser: file row appears in the list
+1. Browser → Lambda:  POST /drive/upload-url/   → presigned POST URL + s3_key + exists flag
+2. Lambda → Browser:  { url, fields, s3_key, exists }  (signed by IAM, 5-min TTL)
+   └── If exists=true: overwrite confirmation modal shown before continuing
+3. Browser → S3:      POST directly (XHR — for progress events)
+4. Browser → Lambda:  POST /drive/confirm/       → head_object, save/update DriveFile row
+5. Browser:           file row injected into DOM (or empty-state removed on first upload)
 ```
 
 ### View / download flow
 
 ```
-1. Browser → Lambda: GET /files/<id>/view/
-2. Lambda → SSM: fetch CloudFront private key (cached after first cold start)
-3. Lambda → sign URL with RSA key (1-hour expiry)
-4. Browser: 302 redirect to signed CloudFront URL
-5. Browser → CloudFront → S3: serves the file
+1. Browser → Lambda:  GET /drive/view/<id>/url/
+2. Lambda → SSM:      fetch CloudFront private key (cached after first cold start)
+3. Lambda:            sign URL with RSA key (1-hour expiry)
+4. Browser:           receives signed CloudFront URL — plays/renders inline or downloads
+```
+
+### Folder zip flow
+
+```
+1. Browser → Lambda:  POST /drive/folders/zip/  → submit AWS Batch job(s)
+2. Lambda → Batch:    submit_job() with FOLDER_IDS, OWNER_SUB, JOB_DB_ID env vars
+3. Fargate container: worker.py — BFS walk folder tree, stream files from S3, write zip, upload to temp-zips/
+4. Worker → DB:       progress updates every 5% (0-90%), then 95%, then 100% + READY status
+5. Browser:           polls /drive/job/<id>/status/ every 3s — progress bar in toast
+6. Browser:           on READY, triggers hidden iframe download of signed zip URL
+7. Zip expires:       24 hours (BatchJob.expires_at)
 ```
 
 ---
@@ -58,12 +73,70 @@ Terraform Remote State
 
 | Branch | Description |
 |--------|-------------|
-| `hello-world` | Minimal Django hello world page |
+| `hello-world` | Minimal Django hello world |
 | `CRUD` | Django CRUD with HTMX inline edits |
-| `auth` | AWS Cognito authentication — signup, verify, signin, dashboard, forgot/reset password |
-| `novadrive` | **Current** — full file storage app (S3 + CloudFront + Cognito + custom domain) |
+| `auth` | AWS Cognito authentication flows |
+| `novadrive` | **Current** — full file storage app |
 
-The CI/CD pipeline triggers on pushes to `novadrive`. See [.github/workflows/deploy.yml](.github/workflows/deploy.yml).
+CI/CD triggers on push to `novadrive`. See [.github/workflows/deploy.yml](.github/workflows/deploy.yml).
+
+---
+
+## Features
+
+### File Management
+| Feature | Detail |
+|---------|--------|
+| **Upload** | Direct-to-S3 via presigned POST (XHR progress bar). File bytes never touch Lambda. |
+| **Overwrite confirmation** | If a file with the same name exists, a modal asks before overwriting. Concurrent uploads each get their own serialised confirmation. |
+| **Download** | Signed 1-hour CloudFront URL. Never a public S3 link. |
+| **Preview** | Images, video (inline player), audio, PDF (iframe), with fallback download prompt for other types. |
+| **Rename** | Renames DB record + migrates S3 key. Extension is read-only in the modal. |
+| **Soft delete** | Moves to Recycle Bin (30-day recovery window). |
+| **Bulk delete** | Select multiple, delete in one request. |
+| **Bulk archive** | Select multiple files, move all to Glacier Deep Archive. |
+
+### Folder Management
+| Feature | Detail |
+|---------|--------|
+| **Create** | Nested folders with parent FK. |
+| **Rename** | Updates DB + recursively migrates all descendant file S3 keys. |
+| **Delete** | Soft delete — appears in Recycle Bin. |
+| **Navigate** | Click to enter; breadcrumb trail shows full path. |
+| **Sidebar** | Folder tree in sidebar. Responsive — collapses to hamburger on mobile. |
+| **Zip download** | AWS Batch compresses entire folder tree; progress toast tracks %. |
+
+### Storage Tiers
+| Tier | Storage Class | Retrieval | How to get there |
+|------|--------------|-----------|-----------------|
+| **Glacier Instant Retrieval** | `GLACIER_IR` | Instant | Default for all uploads |
+| **Deep Archive** | `DEEP_ARCHIVE` | 12–48 hours | User-triggered "Archive" action |
+
+Files in Deep Archive can be restored (request → 12-48h → ready email → 7-day download window → re-archives automatically).
+
+### Archive & Restore
+- Archive single or multiple files to Deep Archive
+- Restore request via UI → S3 initiates retrieval
+- S3 `ObjectRestore:Completed` event → `notify.py` Lambda → updates DB + sends "ready" email via Resend
+- 7-day restore window before automatic re-archive
+- Archive view shows all archived files with restore status badges
+
+### Recycle Bin
+- 30-day soft-delete recovery window for files and folders
+- Days-remaining countdown (colour-coded: green → yellow → red)
+- Restore individual items or bulk-restore selection
+- Permanently delete from bin (beyond recovery)
+
+### UI / UX
+- **List + Grid view** toggle (persisted per session)
+- **Image thumbnails** via CloudFront signed URL — spinner while loading, fade-in on load
+- **Video thumbnails** — `<video preload="metadata">` renders first frame; spinner + `onerror` fallback for archived files
+- **Video player** — tap left/right thirds to seek ±10s; keyboard `←` / `→` seek, `Space` play/pause, `Esc` close
+- **Context menu** — right-click files/folders; items shown/hidden based on selection type and count
+- **Selection-aware labels** — "Delete files (3)", "Download as Zip (1)", etc.
+- **Toast stack** — progress, success, and error toasts; zip jobs show live progress bar
+- **Search** — searches files and folders by name (HTMX partial response)
+- **Responsive sidebar** — full sidebar on desktop; hamburger drawer on mobile with backdrop
 
 ---
 
@@ -73,156 +146,240 @@ The CI/CD pipeline triggers on pushes to `novadrive`. See [.github/workflows/dep
 .
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml              # CI/CD pipeline (triggers on novadrive branch)
+│       └── deploy.yml              # CI/CD — triggers on novadrive branch push
 ├── lambda/
-│   └── serverless_web_app/         # Django application
+│   └── serverless_web_app/
+│       ├── wsgi.py                 # Mangum ASGI handler (Lambda entry point)
+│       ├── notify.py               # Lambda handler for S3 ObjectRestore:Completed events
+│       ├── manage.py
+│       ├── requirements.txt
 │       ├── config/
 │       │   ├── urls.py
 │       │   └── settings/
-│       │       ├── base.py         # shared settings, SSM fetch, NovaDrive config
-│       │       ├── dev.py          # local dev (DEBUG=True, no SSM)
-│       │       └── prod.py         # Lambda prod (secure headers, CSRF origins)
+│       │       ├── base.py         # Shared settings, SSM fetches, AWS config
+│       │       ├── dev.py          # DEBUG=True, no SSM
+│       │       └── prod.py         # Secure headers, CSRF, session cookies
 │       ├── accounts/               # Cognito auth app
+│       │   ├── decorators.py       # @cognito_login_required
+│       │   ├── forms.py
 │       │   ├── views.py            # signup, verify, signin, signout, forgot/reset
-│       │   ├── forms.py            # SignUpForm, SignInForm, ForgotPasswordForm, ResetPasswordForm
 │       │   └── urls.py
-│       ├── drive/                  # NovaDrive app
-│       │   ├── models.py           # DriveFile (owner_sub, name, s3_key, size, content_type, storage_class)
-│       │   ├── views.py            # upload_url, confirm_upload, view_file, delete_file, archive_files
-│       │   ├── urls.py
+│       ├── drive/                  # Main storage app
+│       │   ├── models.py           # DriveFile, DriveFolder, BatchJob
+│       │   ├── views.py            # All drive views (upload, download, rename, archive, restore, zip…)
+│       │   ├── urls.py             # 27 endpoints
 │       │   └── migrations/
+│       ├── batch/
+│       │   ├── Dockerfile          # python:3.12-slim Fargate image
+│       │   ├── requirements.txt
+│       │   └── worker.py           # zip_folder job — BFS walk, S3 stream, zipfile, upload
 │       ├── templates/
-│       │   ├── base.html           # NovaDrive layout + avatar dropdown
-│       │   ├── accounts/           # signup, verify, signin, forgot/reset templates
+│       │   ├── base.html           # Layout, footer, navbar
+│       │   ├── accounts/           # signup, verify, signin, dashboard, forgot/reset
 │       │   └── drive/
-│       │       └── home.html       # file list + XHR upload with progress bar
-│       ├── manage.py
-│       ├── requirements.txt
-│       └── wsgi.py                 # Mangum handler
-├── terraform-state/                # run once manually to bootstrap state backend
-├── apigateway.tf                   # HTTP API, stage (throttling), $default route
-├── cloudfront_drive.tf             # CloudFront distribution (signed URLs required)
-├── cloudfront_keys.tf              # RSA key pair for CloudFront URL signing
-├── cloudwatch.tf                   # Log group, 4xx alarm, spike alarm
-├── cognito.tf                      # Cognito User Pool + App Client
-├── custom_domain.tf                # ACM cert + API Gateway custom domain
-├── iam.tf                          # Lambda execution role + policies
+│       │       ├── home.html       # Main drive UI (Alpine.js driveApp())
+│       │       ├── archived.html   # "File is archived" info page
+│       │       └── partials/
+│       │           ├── file_row.html          # File row (list + grid, thumbnails, spinners)
+│       │           ├── folder_row.html        # Folder row (list + grid)
+│       │           ├── recycle_row.html       # Bin file row (thumbnails, days-left badge)
+│       │           ├── recycle_folder_row.html
+│       │           ├── search_results.html    # HTMX partial for search + drive listing
+│       │           └── sidebar_folder.html    # Sidebar folder tree node
+│       └── static/
+├── terraform-state/                # Run once to bootstrap S3 + DynamoDB state backend
+├── apigateway.tf                   # HTTP API, throttling, $default route
+├── cloudfront_drive.tf             # CloudFront distribution (OAC, signed URLs)
+├── cloudfront_keys.tf              # RSA key pair → SSM + CloudFront key group
+├── cloudwatch.tf                   # Log group (14d), 4xx alarm, spike alarm
+├── cognito.tf                      # User Pool + App Client
+├── custom_domain.tf                # ACM cert (DNS validation) + API Gateway custom domain
+├── iam.tf                          # Lambda execution role + SSM/S3/CloudFront policies
 ├── lambda.tf                       # Lambda function + env vars
-├── outputs.tf                      # API URL, Cognito IDs, Cloudflare CNAME targets
-├── provider.tf
-├── s3_drive.tf                     # Drive bucket (private, versioned, lifecycle)
+├── outputs.tf
+├── s3_drive.tf                     # Drive bucket (private, versioned, CORS, OAC policy)
 ├── sns.tf                          # SNS topic + email subscription
 ├── ssm.tf                          # SSM SecureString for DB URL
 ├── variables.tf
 ├── versions.tf                     # Terraform version + S3 backend
-└── terraform.tfvars                # secrets — gitignored
+└── terraform.tfvars                # Secrets — gitignored
 ```
 
 ---
 
-## File Storage — S3 Lifecycle Tiers
+## Models
 
-NovaDrive automatically moves files through cheaper storage tiers as they age:
+### DriveFolder
+```
+owner_sub       CharField(128)    Cognito user sub — scopes all data per user
+name            CharField(255)
+parent          ForeignKey(self)  Nullable — root folders have no parent
+created_at      DateTimeField     Auto
+deleted_at      DateTimeField     Nullable — soft delete (30-day bin)
+Unique: (owner_sub, parent, name)
+```
 
-| Tier | Trigger | Retrieval | Use case |
-|------|---------|-----------|----------|
-| **Standard** | Upload | Instant | Active files |
-| **Standard-IA** | 30 days (automatic) | Instant | Less-accessed files |
-| **Glacier Instant Retrieval** | 90 days (automatic) | Instant | Rarely accessed |
-| **Glacier Flexible** | User-triggered archive | 3–5 hours | Long-term archive |
-| **Deep Archive** | User-triggered archive | 12 hours | Coldest storage, lowest cost |
+### DriveFile
+```
+owner_sub           CharField(128)    Cognito user sub
+folder              ForeignKey(DriveFolder, nullable)
+name                CharField(255)
+s3_key              CharField(512, unique)   {sub}/{folder_path}/{filename}
+size                BigIntegerField
+content_type        CharField
+storage_class       CharField    GLACIER_IR | DEEP_ARCHIVE
+uploaded_at         DateTimeField
+restore_status      CharField    '' | 'pending' | 'ready'
+restore_expires_at  DateTimeField   Nullable — 7 days after ready
+restore_notify_email EmailField
+deleted_at          DateTimeField   Nullable — soft delete
+```
 
-User-triggered archiving uses S3 copy-in-place (copy object back to itself with a new `StorageClass`) — no data movement or download required.
+### BatchJob
+```
+job_id       CharField(128)   AWS Batch job ID
+type         CharField        zip_folder
+owner_sub    CharField(128)
+folder_name  CharField(255)   For display in toasts
+status       CharField        pending | running | ready | failed
+result_key   CharField(512)   S3 key of output zip
+progress     IntegerField     0–100
+created_at   DateTimeField
+expires_at   DateTimeField    Nullable — 24h after READY
+```
+
+---
+
+## API Endpoints
+
+### Auth (`accounts/urls.py`)
+```
+GET/POST  /signup/              Sign up (Cognito sign_up)
+GET/POST  /verify/              6-digit email verification
+GET/POST  /signin/              Sign in (USER_PASSWORD_AUTH)
+GET       /signout/             Clear session + Cognito global_sign_out
+GET       /dashboard/           Account info
+GET/POST  /forgot-password/     Send reset code
+GET/POST  /reset-password/      Submit code + new password
+```
+
+### Drive (`drive/urls.py`)
+```
+GET   /drive/                              My Drive (root)
+GET   /drive/folder/<pk>/                 Browse folder
+
+POST  /drive/folder/create/               Create folder
+POST  /drive/folder/<pk>/rename/          Rename folder + migrate S3 keys
+POST  /drive/folder/<pk>/delete/          Soft-delete folder
+POST  /drive/folder/<pk>/zip/             Submit Batch zip job (single folder)
+POST  /drive/folders/zip/                 Submit Batch zip jobs (JSON, multiple folders)
+GET   /drive/job/<id>/status/             Poll zip job progress
+
+POST  /drive/upload-url/                  Get presigned POST URL
+POST  /drive/confirm/                     Confirm upload, save metadata
+POST  /drive/file/<pk>/rename/            Rename file + migrate S3 key
+
+GET   /drive/download/<pk>/               Presigned GET download (Content-Disposition: attachment)
+GET   /drive/view/<pk>/url/               Signed CloudFront URL (JSON — for inline preview)
+GET   /drive/view/<pk>/                   Redirect to signed URL
+GET   /drive/thumb/<pk>/                  Signed CloudFront URL for thumbnail (images + video only)
+
+POST  /drive/delete/<pk>/                 Soft-delete file
+POST  /drive/bulk-delete/                 Bulk soft-delete (JSON)
+
+POST  /drive/archive/                     Archive file(s) to Deep Archive (JSON)
+GET   /drive/archive/view/                Archive view
+
+POST  /drive/restore/<pk>/                Initiate Glacier restore
+POST  /drive/restore/                     Bulk restore (JSON)
+
+GET   /drive/bin/                         Recycle Bin
+POST  /drive/bin/<pk>/restore/            Restore file from bin
+POST  /drive/bin/<pk>/delete/             Permanently delete file
+POST  /drive/bin/folder/<pk>/restore/     Restore folder from bin
+POST  /drive/bin/bulk-restore/            Bulk restore from bin (JSON)
+POST  /drive/bin/bulk-delete/             Bulk permanent delete (JSON)
+```
+
+---
+
+## Environment Variables (Lambda)
+
+| Variable | Description |
+|----------|-------------|
+| `DJANGO_SETTINGS_MODULE` | `config.settings.prod` |
+| `COGNITO_USER_POOL_ID` | Cognito User Pool ID |
+| `COGNITO_CLIENT_ID` | Cognito App Client ID |
+| `DRIVE_BUCKET_NAME` | S3 bucket for user files |
+| `CLOUDFRONT_DOMAIN` | CloudFront distribution domain |
+| `CLOUDFRONT_KEY_PAIR_ID` | CloudFront public key ID |
+| `CLOUDFRONT_PRIVATE_KEY_SSM_NAME` | SSM path for RSA private key (PEM) |
+| `SSM_DATABASE_URL_NAME` | SSM path for Neon PostgreSQL URL |
+| `BATCH_JOB_QUEUE` | AWS Batch job queue name |
+| `BATCH_JOB_DEFINITION` | AWS Batch job definition name |
+| `AWS_REGION` | e.g. `ap-southeast-2` |
+| `ALLOWED_HOSTS` | `drive.nodepulsecaringal.xyz` |
+| `CSRF_TRUSTED_ORIGINS` | `https://drive.nodepulsecaringal.xyz` |
+
+Secrets (`DATABASE_URL`, Resend API key, CloudFront RSA private key) are stored in SSM Parameter Store as encrypted `SecureString` values — they never appear in the console or CI logs.
+
+---
+
+## S3 Key Structure
+
+Every file is stored under the owner's Cognito sub, with the full folder path reflected:
+
+```
+{owner_sub}/                          ← root files
+{owner_sub}/photos/                   ← files in "photos" folder
+{owner_sub}/photos/vacation/          ← files in nested folder
+temp-zips/{uuid}.zip                  ← Batch-generated zips (24h expiry)
+```
+
+Renaming a folder cascades an `_s3_move` (copy + delete) across all descendant files, keeping S3 in sync with the DB hierarchy.
 
 ---
 
 ## Custom Domain Setup
 
-This is how `drive.nodepulsecaringal.xyz` was configured — no Route 53 needed because the domain is already on Cloudflare.
-
-### How it works
-
 ```
 Cloudflare DNS (proxied)
   └── CNAME drive → <api-gateway-regional-domain>.execute-api.ap-southeast-2.amazonaws.com
         └── API Gateway custom domain (TLS terminated by ACM cert)
-              └── API mapping → serverless_web_app stage (no /dev prefix)
+              └── API mapping → serverless_web_app stage (no path prefix)
 ```
 
-Cloudflare's proxy sits in front, providing DDoS protection and hiding the raw AWS URL.
+### Steps
 
-### Step-by-step process
+**1. Run `terraform apply`** — creates ACM cert and API Gateway custom domain.
 
-#### Step 1 — Run `terraform apply`
-
-Terraform creates the ACM certificate and the API Gateway custom domain. After apply, read the outputs:
-
-```bash
-terraform output acm_validation_cname_name   # e.g. _abc123.drive.nodepulsecaringal.xyz
-terraform output acm_validation_cname_value  # e.g. _xyz789.acm-validations.aws.
-terraform output cloudflare_cname_target     # e.g. d-xxxxxx.execute-api.ap-southeast-2.amazonaws.com
-```
-
-#### Step 2 — Add ACM validation CNAME in Cloudflare (proxy OFF)
-
-In Cloudflare DNS, add a CNAME record:
+**2. Add ACM validation CNAME in Cloudflare (proxy OFF)**
 
 | Field | Value |
 |-------|-------|
 | Type | CNAME |
-| Name | `_abc123.drive` (the part before your root domain) |
-| Target | `_xyz789.acm-validations.aws.` |
+| Name | `_abc123.drive` (from `terraform output acm_validation_cname_name`) |
+| Target | `_xyz789.acm-validations.aws.` (from `terraform output acm_validation_cname_value`) |
 | Proxy | **DNS only** (grey cloud) |
 
-ACM needs to see the raw DNS record to validate ownership. If Cloudflare proxies it, ACM cannot reach it.
+ACM needs to resolve the raw DNS record. Cloudflare proxy blocks this.
 
-Wait for the certificate to become `Issued` — this takes 2–30 minutes once the record is live.
+**3. Wait for cert** — `aws acm describe-certificate ... --query 'Certificate.Status'` → `"ISSUED"`
 
-```bash
-aws acm describe-certificate --certificate-arn <arn> --region ap-southeast-2 \
-  --query 'Certificate.Status'
-# "ISSUED" means you're good to proceed
-```
-
-#### Step 3 — Add the final drive CNAME in Cloudflare (proxy ON)
-
-Once the cert is `Issued`, add the main CNAME:
+**4. Add drive CNAME (proxy ON)**
 
 | Field | Value |
 |-------|-------|
 | Type | CNAME |
 | Name | `drive` |
-| Target | value from `terraform output cloudflare_cname_target` |
+| Target | `terraform output cloudflare_cname_target` |
 | Proxy | **Proxied** (orange cloud) |
-
-Proxy ON gives you Cloudflare's DDoS protection and hides the raw AWS URL from public DNS lookups.
-
-#### Step 4 — Done
-
-Visit `https://drive.nodepulsecaringal.xyz`. The TLS certificate is from Let's Encrypt (Cloudflare's edge cert), and your ACM cert handles the Cloudflare → AWS leg.
-
-### Why no `/dev` prefix in URLs
-
-`aws_apigatewayv2_api_mapping` maps the custom domain at the root (`/`), not at a stage prefix. API Gateway strips the stage name before passing the request to Lambda. `FORCE_SCRIPT_NAME` and `api_gateway_base_path` are not needed and have been removed.
-
----
-
-## Prerequisites
-
-- [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.6.0
-- [AWS CLI](https://aws.amazon.com/cli/) configured with credentials
-- Python 3.12
-- A [Neon](https://neon.tech) PostgreSQL database (free tier is sufficient)
-- A domain on Cloudflare (or any DNS provider that supports CNAME records)
-- A GitHub repository with Actions enabled
 
 ---
 
 ## First-Time Setup
 
-### 1. Bootstrap the Terraform state backend
-
-Run this **once** to create the S3 bucket and DynamoDB table that store all future Terraform state.
+### 1. Bootstrap Terraform state backend
 
 ```bash
 cd terraform-state
@@ -230,144 +387,49 @@ terraform init
 terraform apply
 ```
 
-> The S3 bucket name (`maangasserverless`) must be globally unique. Change it in
-> `terraform-state/variables.tf` and `versions.tf` before running if it conflicts.
+> Change `maangasserverless` in `terraform-state/variables.tf` and `versions.tf` if the bucket name is taken.
 
 ### 2. Create terraform.tfvars
 
-```bash
-cp terraform.tfvars.example terraform.tfvars
-```
-
-Fill in your values:
-
 ```hcl
-database_url  = "postgresql://user:password@host.ap-southeast-2.aws.neon.tech/dbname?sslmode=require"
+database_url  = "postgresql://user:password@host.neon.tech/dbname?sslmode=require"
 custom_domain = "drive.yourdomain.com"
 ```
 
-`database_url` is gitignored. Terraform stores it in SSM Parameter Store as an encrypted `SecureString`. Lambda reads it at cold start via IAM role — the plain-text URL never appears in the console or CI logs.
-
 ### 3. Add GitHub Actions secrets
-
-Go to **Settings → Secrets and variables → Actions** and add:
 
 | Secret | Description |
 |--------|-------------|
-| `AWS_ACCESS_KEY_ID` | AWS IAM access key |
-| `AWS_SECRET_ACCESS_KEY` | AWS IAM secret key |
+| `AWS_ACCESS_KEY_ID` | IAM access key |
+| `AWS_SECRET_ACCESS_KEY` | IAM secret key |
 | `DATABASE_URL` | Neon connection string (used by CI to run migrations) |
 
-The IAM user needs permissions for: Lambda, API Gateway, IAM, CloudWatch Logs, S3, DynamoDB, SSM, Cognito, CloudFront, ACM, SNS.
+IAM user needs: Lambda, API Gateway, IAM, S3, DynamoDB, SSM, Cognito, CloudFront, ACM, SNS, Batch.
 
-### 4. Push to the novadrive branch
+### 4. Deploy
 
 ```bash
 git push origin novadrive
 ```
 
-GitHub Actions will: install dependencies → run migrations → terraform plan → terraform apply.
+GitHub Actions: install deps → `manage.py migrate` → `terraform plan` → `terraform apply`.
 
-After the first deploy, follow the **Custom Domain Setup** steps above to configure DNS.
+### 5. Confirm SNS subscription
 
-### 5. Confirm your SNS subscription
-
-AWS sends a confirmation email to `lawrencecaringal5@gmail.com` after the first deploy. Click **Confirm subscription** or no alerts will be delivered.
+AWS sends a confirmation email after the first deploy. Click **Confirm subscription** or alarms won't deliver.
 
 ---
 
 ## CI/CD Pipeline
 
-Defined in [.github/workflows/deploy.yml](.github/workflows/deploy.yml). Triggers on push to `novadrive`.
-
 ```
 push to novadrive
-    ├── pip install -r requirements.txt -t lambda/serverless_web_app/  (for Lambda zip)
-    ├── pip install -r requirements.txt                                 (for manage.py migrate)
+    ├── pip install -r requirements.txt -t lambda/serverless_web_app/   (vendor deps for Lambda zip)
+    ├── pip install -r requirements.txt                                   (for manage.py)
     ├── python manage.py migrate
     ├── terraform init
     ├── terraform plan -out=tfplan
     └── terraform apply -auto-approve tfplan
-```
-
----
-
-## Authentication (Cognito)
-
-NovaDrive uses AWS Cognito with the `USER_PASSWORD_AUTH` flow. No third-party auth libraries — direct Cognito API calls via boto3.
-
-| Route | Description |
-|-------|-------------|
-| `/signup/` | Creates Cognito user, triggers verification email |
-| `/verify/` | Submits 6-digit code from email |
-| `/signin/` | Authenticates, stores tokens in Django session |
-| `/signout/` | Clears session |
-| `/forgot-password/` | Sends reset code to email |
-| `/reset-password/` | Submits code + new password |
-
-After signin, tokens are stored in the Django session (`access_token`, `refresh_token`, `user_sub`, `user_email`). All drive routes are protected by the `cognito_login_required` decorator.
-
-The Cognito App Client has `generate_secret = false` — no client secret is needed. Auth is enforced by the IAM role on Lambda.
-
----
-
-## Drive Features
-
-| Feature | How it works |
-|---------|-------------|
-| **Upload** | Browser gets presigned POST URL from Lambda, uploads directly to S3 via XHR (progress bar). Lambda confirms via `head_object` and saves metadata to DB. |
-| **View / Download** | Lambda generates a 1-hour CloudFront signed URL and redirects the browser. Files are never proxied through Lambda. |
-| **Delete** | S3 object deleted, DB row deleted. HTMX removes the row from the DOM with no page reload. |
-| **Archive** | S3 copy-in-place to `GLACIER` or `DEEP_ARCHIVE`. DB storage_class updated. HTMX updates the row in-place. |
-| **Multiple archive** | Select checkboxes, click archive — all selected files sent in one request, all updated atomically. |
-
-### CloudFront signed URLs
-
-Files are not publicly accessible. Every `GET /files/<id>/view/` request:
-1. Checks the session (`cognito_login_required`)
-2. Verifies the file belongs to the authenticated user
-3. Signs a CloudFront URL with the RSA private key (stored in SSM SecureString, loaded at cold start)
-4. Redirects the browser to the signed URL (1-hour expiry)
-
-The RSA key pair is generated by the Terraform `tls` provider on first `terraform apply`. The private key goes into SSM; the public key is registered with CloudFront as a key group. Anonymous requests to CloudFront are denied.
-
----
-
-## Rate Limiting
-
-API Gateway stage throttling in [apigateway.tf](apigateway.tf):
-
-```hcl
-throttling_rate_limit  = 100   # max sustained requests/sec
-throttling_burst_limit = 200   # max requests during a spike
-```
-
-Requests exceeding limits receive `429 Too Many Requests` from API Gateway — Lambda is never invoked, the database is never touched, you are never billed for excess traffic.
-
----
-
-## Alerting
-
-SNS email alerts to `lawrencecaringal5@gmail.com`. Defined in [sns.tf](sns.tf) and [cloudwatch.tf](cloudwatch.tf).
-
-| Alarm | Metric | Threshold | Signal |
-|-------|--------|-----------|--------|
-| `4xx-errors` | `4XXError` (API Gateway) | > 50 in 1 min | 429s firing — attacker is being blocked |
-| `request-spike` | `Count` (API Gateway) | > 500 in 1 min | High volume before throttling kicks in |
-
-Both alarms send a recovery email when traffic returns to normal.
-
----
-
-## Database Credentials Flow
-
-```
-terraform.tfvars (local, gitignored)
-    └── terraform apply
-            └── aws_ssm_parameter (SecureString, KMS-encrypted)
-                    └── Lambda IAM role (ssm:GetParameter)
-                            └── base.py fetches at cold start
-                                    └── dj-database-url parses into DATABASES
 ```
 
 ---
@@ -382,148 +444,31 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-Runs with `config.settings.dev` (DEBUG=True, no SSM, no Cognito calls needed for local).
+Uses `config.settings.dev` (DEBUG=True, no SSM, no Cognito). Set real `AWS_*` env vars if you need S3/Cognito locally.
 
 ---
 
-## Terraform State
+## Rate Limiting
 
-| Resource | Name | Purpose |
-|----------|------|---------|
-| S3 Bucket | `maangasserverless` | Stores `terraform.tfstate` (Intelligent-Tiering) |
-| DynamoDB Table | `terraform-state-lock` | Locks state during plan/apply |
+API Gateway stage throttling:
 
-**State file path:** `serverless-web-app/terraform.tfstate`
-
-### Clearing a stale lock
-
-```bash
-aws dynamodb delete-item \
-  --table-name terraform-state-lock \
-  --key '{"LockID": {"S": "maangasserverless/serverless-web-app/terraform.tfstate"}}' \
-  --region ap-southeast-2
+```hcl
+throttling_rate_limit  = 100   # sustained req/s
+throttling_burst_limit = 200   # spike req/s
 ```
+
+Requests over limit → `429 Too Many Requests` from API Gateway. Lambda never invoked, DB never touched, no charge.
 
 ---
 
-## Terraform Resources
+## Alerting
 
-| File | Resources |
-|------|-----------|
-| `lambda.tf` | `aws_lambda_function`, `archive_file` (zips Django app) |
-| `apigateway.tf` | HTTP API, stage (throttling), $default catch-all route, Lambda permission |
-| `cognito.tf` | User Pool, App Client (no secret, `USER_PASSWORD_AUTH`) |
-| `custom_domain.tf` | ACM certificate (DNS validation), API Gateway custom domain + API mapping |
-| `s3_drive.tf` | Drive S3 bucket (private, versioned, lifecycle tiers, CORS, OAC bucket policy) |
-| `cloudfront_drive.tf` | CloudFront distribution (OAC origin, signed URLs enforced via key group) |
-| `cloudfront_keys.tf` | RSA key pair (`tls_private_key`), SSM SecureString, CloudFront public key + key group |
-| `sns.tf` | SNS topic + email subscription |
-| `cloudwatch.tf` | Log group (14-day retention), 4xx alarm, request spike alarm |
-| `iam.tf` | Lambda execution role, `AWSLambdaBasicExecutionRole`, SSM read policy, S3 + CloudFront policies |
-| `ssm.tf` | `aws_ssm_parameter` — database URL as `SecureString` |
-| `variables.tf` | `aws_region`, `lambda_function_name`, `environment`, `database_url`, `custom_domain` |
-| `outputs.tf` | API URL, Cognito IDs, drive bucket, CloudFront domain, ACM validation CNAMEs |
+SNS email alerts. Defined in `sns.tf` + `cloudwatch.tf`.
 
----
-
-## Environment Variables (Lambda)
-
-| Variable | Source | Description |
-|----------|--------|-------------|
-| `DJANGO_SETTINGS_MODULE` | `lambda.tf` | `config.settings.prod` |
-| `ENVIRONMENT` | `lambda.tf` | `dev` |
-| `SSM_DATABASE_URL_NAME` | `lambda.tf` | SSM path for DB URL |
-| `COGNITO_USER_POOL_ID` | `lambda.tf` | Cognito User Pool ID |
-| `COGNITO_CLIENT_ID` | `lambda.tf` | Cognito App Client ID |
-| `DRIVE_BUCKET_NAME` | `lambda.tf` | S3 bucket for file storage |
-| `CLOUDFRONT_DOMAIN` | `lambda.tf` | CloudFront domain for signing URLs |
-| `CLOUDFRONT_KEY_PAIR_ID` | `lambda.tf` | CloudFront public key ID (for signing) |
-| `CLOUDFRONT_PRIVATE_KEY_SSM_NAME` | `lambda.tf` | SSM path for RSA private key |
-| `ALLOWED_HOSTS` | `lambda.tf` | `drive.nodepulsecaringal.xyz` |
-| `CSRF_TRUSTED_ORIGINS` | `lambda.tf` | `https://drive.nodepulsecaringal.xyz` |
-
----
-
-## Key Design Decisions
-
-**Why direct S3 upload instead of proxying through Lambda?**
-API Gateway has a 6MB payload limit. Lambda proxying large files would hit that immediately. Presigned POST URLs let the browser upload directly to S3 — Lambda only generates the URL and confirms afterward. File bytes never touch Lambda.
-
-**Why XHR instead of fetch() for uploads?**
-The Fetch API does not expose upload progress events. `XMLHttpRequest` has `xhr.upload.addEventListener('progress', ...)` which fires as bytes are sent, enabling the progress bar.
-
-**Why read CSRF token from `<meta>` instead of cookie?**
-`SESSION_COOKIE_HTTPONLY = True` means JavaScript cannot read HttpOnly cookies. The CSRF token is written into a `<meta name="csrf-token">` tag in the base template so Alpine.js can read it safely.
-
-**Why CloudFront signed URLs?**
-The S3 bucket is fully private — no public access at all. CloudFront is the only way to read objects (via OAC). Signed URLs add a second layer: even CloudFront URLs expire after 1 hour and are tied to the user's authenticated session. There is no way for a user to share or bookmark a permanent link to someone else's file.
-
-**Why SSM SecureString for the CloudFront private key?**
-The RSA private key grants the ability to sign CloudFront URLs for all files in the bucket. Storing it as a Lambda environment variable would expose it in the AWS console. SSM SecureString encrypts it with KMS and Lambda reads it at cold start using its IAM role.
-
-**Why Cloudflare proxy ON for the final CNAME?**
-With proxy ON, Cloudflare acts as a reverse proxy — public DNS returns Cloudflare's IPs, not the raw API Gateway domain. This provides DDoS protection at Cloudflare's edge and hides the underlying AWS infrastructure from DNS lookups.
-
-**Why proxy OFF for the ACM validation CNAME?**
-ACM validates certificate ownership by resolving a specific CNAME record and expecting a raw DNS answer. If Cloudflare proxies the validation record, ACM sees Cloudflare's IP instead of the expected value and validation fails. The record must be DNS only (grey cloud) until the certificate is issued, after which it can be left or removed.
-
-**Why no Route 53?**
-Route 53 costs $0.50/hosted zone/month. The domain is already on Cloudflare's free plan. Cloudflare supports CNAME records pointing to API Gateway regional endpoints directly. ACM DNS validation works fine with any DNS provider that supports CNAME records.
-
-**Why `generate_secret = false` on the Cognito App Client?**
-Mobile and SPA clients cannot safely store a client secret. Since Lambda handles all auth calls server-side via IAM role, there is no need for a client secret — Cognito trusts the call because Lambda has the correct IAM permissions.
-
-**Why settings split (base/dev/prod)?**
-`DJANGO_SETTINGS_MODULE=config.settings.prod` is set on Lambda. `prod.py` enables secure headers, CSRF origins, and secure session cookies. `dev.py` uses `DEBUG=True` locally without touching SSM or Cognito. Debug output never reaches production.
-
----
-
-## Troubleshooting
-
-### CRITICAL: S3 Direct Upload CORS Failure — "No Access-Control-Allow-Origin"
-
-**Symptom:** Browser console shows:
-```
-Access to XMLHttpRequest at 'https://bucket.s3.amazonaws.com/' from origin 'https://your-domain.com'
-has been blocked by CORS policy: Response to preflight request doesn't pass access control check:
-No 'Access-Control-Allow-Origin' header is present on the requested resource.
-```
-
-Upload stays at 0% and throws "Network error uploading to S3".
-
-**Root cause:** boto3's `generate_presigned_post` defaults to the **global** S3 endpoint (`s3.amazonaws.com`) even when `region_name` is set. The S3 bucket is in `ap-southeast-2`. When the browser POSTs to the global endpoint, S3 returns a redirect to the regional endpoint. Chrome/Edge send a CORS preflight before following that redirect — and the global endpoint does not return `Access-Control-Allow-Origin` headers for a bucket in another region. Preflight fails → upload blocked.
-
-Adding `Config(signature_version="s3v4")` alone does **not** fix this — it changes the signing algorithm but the presigned URL endpoint URL remains `s3.amazonaws.com`.
-
-**Fix:** Explicitly pin the S3 client to the regional endpoint with `endpoint_url`:
-
-```python
-# drive/views.py
-from botocore.config import Config
-
-def _s3():
-    return boto3.client(
-        "s3",
-        region_name=settings.AWS_REGION,
-        endpoint_url=f"https://s3.{settings.AWS_REGION}.amazonaws.com",  # ← CRITICAL
-        config=Config(signature_version="s3v4"),
-    )
-```
-
-**How to verify the fix worked:** Open browser DevTools → Console. The upload log line should show the regional URL:
-```
-# Bad  (global endpoint — will CORS fail):
-[NovaDrive] Uploading to: https://serverless-web-app-drive-dev.s3.amazonaws.com/
-
-# Good (regional endpoint — works):
-[NovaDrive] Uploading to: https://s3.ap-southeast-2.amazonaws.com/serverless-web-app-drive-dev
-```
-
-S3 response status `204` confirms a successful upload.
-
-**Why this works:** `endpoint_url` overrides boto3's endpoint resolution entirely. The presigned POST URL is built from this exact host, so the browser's XHR goes directly to the regional bucket endpoint — no redirect, no CORS preflight mismatch.
-
-> This applies to any AWS region. Replace `ap-southeast-2` with your region. The S3 CORS `allowed_origins` must also match the domain the browser is uploading from (already configured in `s3_drive.tf`).
+| Alarm | Metric | Threshold | Signal |
+|-------|--------|-----------|--------|
+| `4xx-errors` | `4XXError` (API GW) | > 50 in 1 min | Throttling firing |
+| `request-spike` | `Count` (API GW) | > 500 in 1 min | High traffic |
 
 ---
 
@@ -531,18 +476,88 @@ S3 response status `204` confirms a successful upload.
 
 | Service | Free Tier | After free tier |
 |---------|-----------|-----------------|
-| Lambda | 1M requests/mo | ~$0.20/1M requests |
-| API Gateway | 1M requests/mo | ~$1.00/1M requests |
-| CloudFront | 1TB transfer + 10M requests/mo | ~$0.0085/GB transfer |
-| S3 Storage | 5GB | ~$0.025/GB/mo (Standard) |
-| S3 Glacier IR | — | ~$0.004/GB/mo |
-| S3 Glacier Flexible | — | ~$0.0036/GB/mo |
-| S3 Deep Archive | — | ~$0.00099/GB/mo |
-| Cognito | 50,000 MAU | $0.0055/MAU after |
+| Lambda | 1M req/mo | ~$0.20/1M req |
+| API Gateway | 1M req/mo | ~$1.00/1M req |
+| CloudFront | 1TB transfer + 10M req/mo | ~$0.0085/GB |
+| S3 (Glacier IR) | — | ~$0.004/GB/mo |
+| S3 (Deep Archive) | — | ~$0.00099/GB/mo |
+| AWS Batch / Fargate | — | ~$0.04048/vCPU-hr |
+| Cognito | 50,000 MAU | $0.0055/MAU |
 | ACM Certificate | Free | Always free |
 | CloudWatch Logs | 5GB ingestion | ~$0.50/GB |
-| SSM Parameter Store | 10,000 API calls/mo | $0 for standard parameters |
-| SNS | 1,000 email notifications/mo | ~$2.00/100,000 after |
-| S3 (state) | Minimal | < $0.01/mo |
-| DynamoDB (lock) | 25GB + 200M requests | $0 for this use case |
+| SSM Parameter Store | 10,000 API calls/mo | $0 (standard) |
+| SNS | 1,000 emails/mo | ~$2.00/100k |
 | Neon PostgreSQL | 0.5GB | $0 on free tier |
+| S3 (Terraform state) | — | < $0.01/mo |
+| DynamoDB (lock table) | 25GB + 200M req | $0 for this use case |
+
+---
+
+## Key Design Decisions
+
+**Why direct S3 upload?**
+API Gateway has a 6MB payload limit and Lambda a 6MB response limit. Presigned POST URLs let the browser upload directly to S3 — Lambda only generates the URL and confirms afterward. File bytes never touch Lambda or API Gateway.
+
+**Why XHR instead of fetch() for uploads?**
+The Fetch API does not expose upload progress events. `XMLHttpRequest.upload` fires `progress` events as bytes are sent, enabling the per-file progress bar.
+
+**Why CloudFront signed URLs?**
+The S3 bucket is fully private (no public access). CloudFront is the only read path (OAC). Signed URLs expire after 1 hour and are tied to the authenticated session — no permanent shareable links.
+
+**Why SSM SecureString for the CloudFront private key?**
+The RSA private key grants ability to sign all CloudFront URLs. Storing it as a Lambda env var exposes it in the AWS console. SSM SecureString encrypts it with KMS and Lambda reads it via IAM role at cold start, then caches it in a module-level global.
+
+**Why AWS Batch for folder zips?**
+Lambda has a 15-minute execution timeout and limited memory. Large folder trees can take longer to zip and upload. Batch runs a Fargate container with no time limit, writes progress to the DB, and the frontend polls for completion.
+
+**Why soft delete (Recycle Bin) instead of immediate S3 deletion?**
+Accidental deletes are common. A 30-day recycle bin lets users recover files without contacting support. The DB `deleted_at` field gates all queries; the S3 object is only deleted on permanent deletion.
+
+**Why `generate_secret = false` on the Cognito App Client?**
+Lambda handles all auth calls server-side via IAM role — a client secret is not needed, and it cannot be safely stored in a browser anyway.
+
+**Why Cloudflare proxy ON?**
+Public DNS returns Cloudflare IPs, not the raw API Gateway domain — DDoS protection at the edge and AWS infrastructure is not exposed.
+
+**Why proxy OFF for the ACM validation CNAME?**
+ACM resolves the validation CNAME directly. Cloudflare's proxy returns its own IP instead of the expected value, breaking validation. The record must be DNS-only until the cert is issued.
+
+---
+
+## Troubleshooting
+
+### S3 Direct Upload CORS Failure
+
+**Symptom:** `No 'Access-Control-Allow-Origin' header` in browser console, upload stuck at 0%.
+
+**Root cause:** boto3's `generate_presigned_post` defaults to the global S3 endpoint (`s3.amazonaws.com`). The browser's XHR hits the global endpoint, which redirects to the regional one. Chrome sends a CORS preflight before following the redirect — the global endpoint doesn't return CORS headers. Preflight fails.
+
+**Fix:** Pin the S3 client to the regional endpoint:
+
+```python
+boto3.client(
+    "s3",
+    region_name=settings.AWS_REGION,
+    endpoint_url=f"https://s3.{settings.AWS_REGION}.amazonaws.com",
+    config=Config(signature_version="s3v4"),
+)
+```
+
+**Verify:** Upload log should show `https://s3.ap-southeast-2.amazonaws.com/...` (regional), not `https://<bucket>.s3.amazonaws.com/` (global). S3 response `204` = success.
+
+### Video thumbnail spinner never hides
+
+**Cause:** `drive_thumb` returns 404 for Deep Archive files (not accessible without restore). The `<video>` element fires `onerror` on 404, but without a handler the spinner stays.
+
+**Fix:** All video thumbnail elements have both `onloadedmetadata` (success) and `onerror` (failure) handlers that dismiss the spinner.
+
+### Batch zip job stuck in `pending`
+
+Check CloudWatch logs for the Batch job definition. Common causes:
+- Fargate container can't reach SSM (check VPC/subnet config and IAM policy)
+- `SSM_DATABASE_URL_NAME` env var not set on the job definition
+- Docker image not updated after a `worker.py` change
+
+### Rename fails silently
+
+If `_s3_move` (copy + delete) partially fails (copy succeeds, delete fails), the DB row is updated but the old S3 key still exists. Check CloudWatch logs for `s3.copy_object` or `s3.delete_object` errors against the Lambda IAM policy.
