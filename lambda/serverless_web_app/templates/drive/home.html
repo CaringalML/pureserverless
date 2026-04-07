@@ -1273,11 +1273,66 @@ document.addEventListener('alpine:init', () => {
 
             {# Video #}
             <template x-if="isVideo()">
-                <video :src="preview.url"
-                       controls
-                       class="max-w-full max-h-full rounded-lg shadow-2xl"
-                       style="max-height:calc(100vh - 80px)">
-                </video>
+                <div class="relative flex items-center justify-center w-full h-full"
+                     x-data="{
+                         seekFlash: '',
+                         flashTimer: null,
+                         seek(secs) {
+                             const v = $el.querySelector('video');
+                             if (!v) return;
+                             v.currentTime = Math.max(0, Math.min(v.duration || 0, v.currentTime + secs));
+                             this.seekFlash = secs > 0 ? 'right' : 'left';
+                             clearTimeout(this.flashTimer);
+                             this.flashTimer = setTimeout(() => this.seekFlash = '', 600);
+                         }
+                     }">
+
+                    {# Back 10s tap zone — left third #}
+                    <div class="absolute inset-y-0 left-0 w-1/3 z-10 flex items-center justify-start pl-6 cursor-pointer select-none"
+                         @click.stop="seek(-10)"
+                         @dblclick.stop="seek(-10)">
+                        <div x-show="seekFlash === 'left'"
+                             x-transition:enter="transition ease-out duration-100"
+                             x-transition:enter-start="opacity-0 scale-75"
+                             x-transition:enter-end="opacity-100 scale-100"
+                             x-transition:leave="transition ease-in duration-300"
+                             x-transition:leave-start="opacity-100"
+                             x-transition:leave-end="opacity-0"
+                             class="flex flex-col items-center gap-1 text-white/80 pointer-events-none">
+                            <svg class="w-10 h-10 drop-shadow-lg" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+                                <text x="12" y="14.5" text-anchor="middle" font-size="5.5" font-family="sans-serif" fill="white" font-weight="bold">10</text>
+                            </svg>
+                            <span class="text-xs font-semibold drop-shadow">-10s</span>
+                        </div>
+                    </div>
+
+                    {# Forward 10s tap zone — right third #}
+                    <div class="absolute inset-y-0 right-0 w-1/3 z-10 flex items-center justify-end pr-6 cursor-pointer select-none"
+                         @click.stop="seek(10)"
+                         @dblclick.stop="seek(10)">
+                        <div x-show="seekFlash === 'right'"
+                             x-transition:enter="transition ease-out duration-100"
+                             x-transition:enter-start="opacity-0 scale-75"
+                             x-transition:enter-end="opacity-100 scale-100"
+                             x-transition:leave="transition ease-in duration-300"
+                             x-transition:leave-start="opacity-100"
+                             x-transition:leave-end="opacity-0"
+                             class="flex flex-col items-center gap-1 text-white/80 pointer-events-none">
+                            <svg class="w-10 h-10 drop-shadow-lg" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 5V1l5 5-5 5V7c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6h2c0 4.42-3.58 8-8 8s-8-3.58-8-8 3.58-8 8-8z"/>
+                                <text x="12" y="14.5" text-anchor="middle" font-size="5.5" font-family="sans-serif" fill="white" font-weight="bold">10</text>
+                            </svg>
+                            <span class="text-xs font-semibold drop-shadow">+10s</span>
+                        </div>
+                    </div>
+
+                    <video :src="preview.url"
+                           controls
+                           class="max-w-full max-h-full rounded-lg shadow-2xl"
+                           style="max-height:calc(100vh - 80px)">
+                    </video>
+                </div>
             </template>
 
             {# Audio #}
