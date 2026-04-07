@@ -992,8 +992,8 @@ document.addEventListener('alpine:init', () => {
          @click.stop
          class="w-52 bg-[#1a1d27] border border-zinc-700/60 rounded-xl shadow-2xl shadow-black/60 overflow-hidden py-1">
 
-        {# Open folders only, single select #}
-        <a x-show="ctx.isFolder && selectedFolders.length === 1"
+        {# Open folders only, single select, no files selected #}
+        <a x-show="ctx.isFolder && selectedFolders.length === 1 && selected.length === 0"
            :href="ctx.folderUrl"
            @click="closeCtx()"
            class="flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-white/5 hover:text-zinc-100 transition-colors">
@@ -1001,8 +1001,8 @@ document.addEventListener('alpine:init', () => {
             Open
         </a>
 
-        {# Rename — single item only #}
-        <button x-show="(ctx.isFolder && selectedFolders.length === 1) || (!ctx.isFolder && selected.length === 1)"
+        {# Rename — only when exactly one item of one type is selected #}
+        <button x-show="(ctx.isFolder && selectedFolders.length === 1 && selected.length === 0) || (!ctx.isFolder && selected.length === 1 && selectedFolders.length === 0)"
                 @click="closeCtx(); openRename(ctx.pk, ctx.isFolder, ctx.name)"
                 class="w-full flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-white/5 hover:text-zinc-100 transition-colors">
             <svg class="w-4 h-4 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
@@ -1014,11 +1014,11 @@ document.addEventListener('alpine:init', () => {
                 @click="closeCtx(); downloadFolderZip(selectedFolders.length > 1 ? selectedFolders : [ctx.pk], selectedFolders.length > 1 ? `${selectedFolders.length} folders` : ctx.name)"
                 class="w-full flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-white/5 hover:text-zinc-100 transition-colors">
             <svg class="w-4 h-4 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 12v-8m0 8l-3-3m3 3l3-3"/></svg>
-            <span x-text="selectedFolders.length > 1 ? `Download folders (${selectedFolders.length})` : 'Download as Zip'"></span>
+            <span x-text="selectedFolders.length > 1 ? `Download folders (${selectedFolders.length})` : `Download as Zip (${selectedFolders.length})`"></span>
         </button>
 
-        {# Preview only if not archived or is restored #}
-        <button x-show="!ctx.isFolder && selected.length === 1 && (!ctx.archived || ctx.restoreStatus === 'ready')"
+        {# Preview only if not archived or is restored, and no folders selected #}
+        <button x-show="!ctx.isFolder && selected.length === 1 && selectedFolders.length === 0 && (!ctx.archived || ctx.restoreStatus === 'ready')"
                 @click="openPreview(ctx.pk); closeCtx()"
                 class="w-full flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-white/5 hover:text-zinc-100 transition-colors">
             <svg class="w-4 h-4 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
@@ -1040,7 +1040,7 @@ document.addEventListener('alpine:init', () => {
                 "
                 class="w-full flex items-center gap-3 px-4 py-2 text-sm text-zinc-300 hover:bg-white/5 hover:text-zinc-100 transition-colors">
             <svg class="w-4 h-4 text-zinc-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 12v-8m0 8l-3-3m3 3l3-3"/></svg>
-            <span x-text="selected.length > 1 ? `Download files (${selected.length})` : 'Download'"></span>
+            <span x-text="selected.length > 0 ? `Download files (${selected.length})` : 'Download'"></span>
         </button>
 
         {# Archive to Deep Archive files only, hidden when folders are in the selection #}
@@ -1135,9 +1135,9 @@ document.addEventListener('alpine:init', () => {
                 <span x-text="
                     (selected.length > 0 && selectedFolders.length > 0)
                         ? `Delete folders (${selectedFolders.length}) + files (${selected.length})`
-                        : selectedFolders.length > 1
+                        : selectedFolders.length > 0
                             ? `Delete folders (${selectedFolders.length})`
-                            : selected.length > 1
+                            : selected.length > 0
                                 ? `Delete files (${selected.length})`
                                 : 'Delete'
                 "></span>
